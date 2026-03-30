@@ -16,7 +16,7 @@ export default function Boutique() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
         <div>
-          <h1 className="font-playfair text-4xl font-bold text-[#1a1a1a]">Boutique</h1>
+          <h1 className="font-playfair text-4xl font-bold text-white">Boutique</h1>
           <p className="text-gray-500 mt-2 text-sm">{products.length} produits disponibles</p>
         </div>
 
@@ -27,8 +27,8 @@ export default function Boutique() {
             onClick={() => setSort("asc")}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
               sort === "asc"
-                ? "bg-[#1a1a1a] text-white border-[#1a1a1a]"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                ? "bg-[#ff9ed5] text-[#0a0a0a] border-[#ff9ed5]"
+                : "bg-transparent text-gray-400 border-white/10 hover:border-[#ff9ed5]/50 hover:text-[#ff9ed5]"
             }`}
           >
             Croissant
@@ -37,8 +37,8 @@ export default function Boutique() {
             onClick={() => setSort("desc")}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
               sort === "desc"
-                ? "bg-[#1a1a1a] text-white border-[#1a1a1a]"
-                : "bg-white text-gray-600 border-gray-200 hover:border-gray-400"
+                ? "bg-[#ff9ed5] text-[#0a0a0a] border-[#ff9ed5]"
+                : "bg-transparent text-gray-400 border-white/10 hover:border-[#ff9ed5]/50 hover:text-[#ff9ed5]"
             }`}
           >
             Décroissant

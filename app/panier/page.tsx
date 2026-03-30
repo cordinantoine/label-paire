@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useCartStore } from "@/lib/cartStore";
+import { getProductBySlug } from "@/lib/products";
 
 export default function Panier() {
   const { items, removeItem, updateQuantity, total } = useCartStore();
@@ -28,14 +30,26 @@ export default function Panier() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
         {/* Items */}
         <div className="lg:col-span-2 flex flex-col gap-4">
-          {items.map((item) => (
+          {items.map((item) => {
+            const product = getProductBySlug(item.slug);
+            return (
             <div key={item.slug} className="flex items-center gap-4 bg-[#111] border border-[#1f1f1f] rounded-xl p-4">
-              {/* Color block */}
-              <div className="w-16 h-16 rounded-lg bg-[#ff9ed5]/10 border border-[#ff9ed5]/20 flex items-center justify-center flex-shrink-0">
-                <svg className="w-7 h-7 text-[#ff9ed5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
+              {/* Image */}
+              <div className="w-16 h-16 rounded-lg bg-[#1a1a1a] border border-white/[0.06] flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                {product?.image ? (
+                  <Image
+                    src={product.image}
+                    alt={item.nom}
+                    fill
+                    className="object-contain p-1.5"
+                    sizes="64px"
+                  />
+                ) : (
+                  <svg className="w-7 h-7 text-[#ff9ed5]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                      d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                  </svg>
+                )}
               </div>
 
               <div className="flex-1 min-w-0">
@@ -74,7 +88,8 @@ export default function Panier() {
                 </svg>
               </button>
             </div>
-          ))}
+          );
+          })}
         </div>
 
         {/* Summary */}
