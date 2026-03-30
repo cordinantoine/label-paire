@@ -4,6 +4,7 @@ export type Product = {
   prix: number;
   description: string;
   badge: string | null;
+  image?: string;
 };
 
 export const products: Product[] = [
@@ -38,6 +39,7 @@ export const products: Product[] = [
     description:
       "Mousse nettoyante 200 mL conçue pour l'intérieur et l'extérieur des chaussures, sacs et casquettes. Agit en profondeur sur tous les tissus et matériaux. Ne nécessite pas d'eau.",
     badge: null,
+    image: "/products/la-belle-mousse.jpg",
   },
   {
     slug: "la-belle-creme",
@@ -46,6 +48,7 @@ export const products: Product[] = [
     description:
       "Crème oxydante 150 mL pour reblanchir les semelles jaunies et vieillies. Restaure l'éclat d'origine de vos semelles en quelques applications.",
     badge: null,
+    image: "/products/la-belle-creme.jpg",
   },
   {
     slug: "la-peinture-blanche",
@@ -54,6 +57,7 @@ export const products: Product[] = [
     description:
       "Rénovateur blanchissant pour chaussures. Redonne vie aux zones décolorées et égratignées sur cuir, synthétique et autres matières. Finition propre et homogène.",
     badge: "Nouveauté",
+    image: "/products/la-peinture-blanche.jpg",
   },
   {
     slug: "la-peinture-noire",
@@ -62,6 +66,7 @@ export const products: Product[] = [
     description:
       "Peinture rénovatrice noire pour recolorer et couvrir les zones abîmées de vos sneakers. Compatible avec le cuir, le synthétique et les matières textiles.",
     badge: "Nouveauté",
+    image: "/products/la-peinture-noire.jpg",
   },
   {
     slug: "paire-embauchoirs",
@@ -78,6 +83,7 @@ export const products: Product[] = [
     description:
       "Spray protecteur pour imperméabiliser vos sneakers et les protéger des taches et de l'humidité. Compatible cuir, daim, nubuck et textile.",
     badge: "Nouveauté",
+    image: "/products/spray-impermeabilisant.jpg",
   },
   {
     slug: "le-tampon-blanc",
@@ -86,6 +92,7 @@ export const products: Product[] = [
     description:
       "Permet de nettoyer les matières délicates (cuir, tissu, daim, nubuck) et de nettoyer en profondeur la semelle. Idéal pour essuyer et sécher les chaussures pendant le nettoyage.",
     badge: null,
+    image: "/products/le-tampon-blanc.jpg",
   },
   {
     slug: "patch-reparation-talon",

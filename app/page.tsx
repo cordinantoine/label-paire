@@ -11,10 +11,10 @@ const featuredSlugs = ["kit-reparation-premium", "kit-reparation", "la-belle-mou
 const featuredProducts = featuredSlugs.map((s) => products.find((p) => p.slug === s)!).filter(Boolean);
 
 const stats = [
-  { label: "clients satisfaits", target: 500, suffix: "+" },
-  { label: "produits", target: 11, suffix: "" },
-  { label: "h expédition", target: 48, suffix: "" },
-  { label: "avis clients", target: 4.9, suffix: "★" },
+  { label: "clients satisfaits", target: 500, prefix: "+", suffix: "" },
+  { label: "Views", target: 100, prefix: "+", suffix: "M" },
+  { label: "Abonnés", target: 100, prefix: "+", suffix: "k" },
+  { label: "avis clients", target: 4.9, prefix: "", suffix: "★" },
 ];
 
 export default function Home() {
@@ -73,12 +73,12 @@ export default function Home() {
       </section>
 
       {/* Stats */}
-      <section className="bg-[#f9f9f9] py-14">
+      <section className="bg-[#0d0d0d] border-y border-white/[0.06] py-14">
         <div className="max-w-5xl mx-auto px-4 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-          {stats.map((stat) => (
+          {stats.map((stat, i) => (
             <div key={stat.label}>
-              <div className="font-playfair text-4xl font-bold text-[#1a1a1a]">
-                <AnimatedCounter target={stat.target} suffix={stat.suffix} />
+              <div className={`font-playfair text-4xl font-bold ${i % 2 === 0 ? "text-[#ff9ed5]" : "text-[#a9dbf1]"}`}>
+                <AnimatedCounter target={stat.target} prefix={stat.prefix} suffix={stat.suffix} />
               </div>
               <p className="text-gray-500 text-sm mt-1">{stat.label}</p>
             </div>
@@ -89,7 +89,7 @@ export default function Home() {
       {/* Featured products */}
       <section className="max-w-6xl mx-auto px-4 py-20">
         <div className="text-center mb-12">
-          <h2 className="font-playfair text-4xl font-bold text-[#1a1a1a]">Nos bestsellers</h2>
+          <h2 className="font-playfair text-4xl font-bold text-white">Nos bestsellers</h2>
           <p className="text-gray-500 mt-3 text-base">Les produits préférés de notre communauté</p>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -100,9 +100,9 @@ export default function Home() {
         <div className="text-center mt-10">
           <Link
             href="/boutique"
-            className="inline-block border-2 border-[#1a1a1a] text-[#1a1a1a] font-medium px-8 py-3 rounded-lg hover:bg-[#1a1a1a] hover:text-white transition-colors text-sm"
+            className="inline-block border border-[#ff9ed5]/40 text-[#ff9ed5] font-medium px-8 py-3 rounded-lg hover:bg-[#ff9ed5]/10 transition-colors text-sm"
           >
-            Voir tous les produits
+            Voir tous les produits →
           </Link>
         </div>
       </section>

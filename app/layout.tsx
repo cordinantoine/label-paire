@@ -39,6 +39,9 @@ export default function RootLayout({
   return (
     <html lang="fr" className={`${playfair.variable} ${inter.variable}`}>
       <body className="antialiased font-inter">
+        <div className="bg-[#ff9ed5] text-[#0a0a0a] text-xs font-semibold text-center py-2 tracking-wide">
+          🚚 Livraison offerte dès 50€ &nbsp;·&nbsp; Expédition sous 48h &nbsp;·&nbsp; Retours gratuits 30 jours
+        </div>
         <Navbar />
         <main>{children}</main>
         <Footer />

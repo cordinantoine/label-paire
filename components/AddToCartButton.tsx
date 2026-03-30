@@ -19,8 +19,8 @@ export default function AddToCartButton({ product }: { product: Product }) {
       onClick={handleAdd}
       className={`w-full py-4 rounded-lg font-semibold text-sm transition-all duration-300 ${
         added
-          ? "bg-green-500 text-white"
-          : "bg-[#1a1a1a] text-white hover:bg-[#333]"
+          ? "bg-green-500 text-white shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+          : "btn-shimmer text-[#0a0a0a] shadow-[0_0_20px_rgba(255,158,213,0.3)] hover:shadow-[0_0_35px_rgba(255,158,213,0.5)]"
       }`}
     >
       {added ? "Ajouté au panier ✓" : "Ajouter au panier"}

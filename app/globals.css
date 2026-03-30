@@ -5,7 +5,7 @@
 :root {
   --rose: #ff9ed5;
   --blue: #a9dbf1;
-  --dark: #1a1a1a;
+  --dark: #0a0a0a;
 }
 
 * {
@@ -14,12 +14,39 @@
 
 body {
   font-family: var(--font-inter), sans-serif;
-  color: #1a1a1a;
-  background: #ffffff;
+  color: #f0f0f0;
+  background: #0a0a0a;
 }
 
 h1, h2, h3, h4 {
   font-family: var(--font-playfair), serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff9ed5;
+}
+
+/* Shimmer button animation */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.btn-shimmer {
+  background: linear-gradient(90deg, #ff9ed5 0%, #ffcae8 40%, #ff9ed5 60%, #ff9ed5 100%);
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
 }
 
 @layer utilities {
