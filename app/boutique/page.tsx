@@ -3,9 +3,12 @@
 import { useState } from "react";
 import ProductCard from "@/components/ProductCard";
 import { products } from "@/lib/products";
+import { useT } from "@/hooks/useT";
+import { tr } from "@/lib/i18n";
 
 export default function Boutique() {
   const [sort, setSort] = useState<"asc" | "desc">("asc");
+  const { t } = useT();
 
   const sorted = [...products].sort((a, b) =>
     sort === "asc" ? a.prix - b.prix : b.prix - a.prix
@@ -16,13 +19,13 @@ export default function Boutique() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-10">
         <div>
-          <h1 className="font-playfair text-4xl font-bold text-white">Boutique</h1>
-          <p className="text-gray-500 mt-2 text-sm">{products.length} produits disponibles</p>
+          <h1 className="font-playfair text-4xl font-bold text-white">{t(tr.shop_title)}</h1>
+          <p className="text-gray-500 mt-2 text-sm">{products.length} {t(tr.shop_count)}</p>
         </div>
 
         {/* Sort */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-500">Trier par prix :</span>
+          <span className="text-sm text-gray-500">{t(tr.shop_sort_label)}</span>
           <button
             onClick={() => setSort("asc")}
             className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
@@ -31,7 +34,7 @@ export default function Boutique() {
                 : "bg-transparent text-gray-400 border-white/10 hover:border-[#ff9ed5]/50 hover:text-[#ff9ed5]"
             }`}
           >
-            Croissant
+            {t(tr.shop_sort_asc)}
           </button>
           <button
             onClick={() => setSort("desc")}
@@ -41,7 +44,7 @@ export default function Boutique() {
                 : "bg-transparent text-gray-400 border-white/10 hover:border-[#ff9ed5]/50 hover:text-[#ff9ed5]"
             }`}
           >
-            Décroissant
+            {t(tr.shop_sort_desc)}
           </button>
         </div>
       </div>

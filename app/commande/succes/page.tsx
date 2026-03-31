@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect } from "react";
 import { useCartStore } from "@/lib/cartStore";
+import { useT } from "@/hooks/useT";
+import { tr } from "@/lib/i18n";
 
 export default function CommandeSucces() {
   const clearCart = useCartStore((s) => s.clearCart);
+  const { t } = useT();
 
   useEffect(() => {
     clearCart();
@@ -18,16 +21,13 @@ export default function CommandeSucces() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
         </svg>
       </div>
-      <h1 className="font-playfair text-4xl font-bold text-white mb-4">Commande confirmée !</h1>
-      <p className="text-gray-400 text-base leading-relaxed mb-8">
-        Merci pour votre commande. Un email de confirmation vous a été envoyé.
-        Votre colis sera expédié sous 48h ouvrées.
-      </p>
+      <h1 className="font-playfair text-4xl font-bold text-white mb-4">{t(tr.success_title)}</h1>
+      <p className="text-gray-400 text-base leading-relaxed mb-8">{t(tr.success_msg)}</p>
       <Link
         href="/boutique"
         className="inline-block btn-shimmer text-[#0a0a0a] font-semibold px-8 py-3.5 rounded-lg text-sm"
       >
-        Retour à la boutique
+        {t(tr.success_back)}
       </Link>
     </div>
   );

@@ -1,12 +1,21 @@
+"use client";
+
 import Link from "next/link";
 import Image from "next/image";
 import type { Product } from "@/lib/products";
+import { useT } from "@/hooks/useT";
+import { tr, productTranslations } from "@/lib/i18n";
 
 type Props = {
   product: Product;
 };
 
 export default function ProductCard({ product }: Props) {
+  const { t } = useT();
+  const pt = productTranslations[product.slug];
+  const name = pt ? t(pt.nom) : product.nom;
+  const description = pt ? t(pt.description) : product.description;
+
   return (
     <Link href={`/produit/${product.slug}`} className="group block">
       <div className="bg-[#111] rounded-xl overflow-hidden border border-[#1f1f1f] hover:border-[#ff9ed5]/40 hover:shadow-[0_0_30px_rgba(255,158,213,0.1)] transition-all duration-300">
@@ -20,7 +29,7 @@ export default function ProductCard({ product }: Props) {
           {product.image ? (
             <Image
               src={product.image}
-              alt={product.nom}
+              alt={name}
               fill
               className="object-contain p-4 group-hover:scale-105 transition-transform duration-300"
               sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
@@ -36,12 +45,12 @@ export default function ProductCard({ product }: Props) {
         {/* Info */}
         <div className="p-4">
           <h3 className="font-playfair font-semibold text-white text-base group-hover:text-[#ff9ed5] transition-colors line-clamp-1">
-            {product.nom}
+            {name}
           </h3>
-          <p className="text-gray-500 text-sm mt-1 line-clamp-2">{product.description}</p>
+          <p className="text-gray-500 text-sm mt-1 line-clamp-2">{description}</p>
           <div className="flex items-center justify-between mt-3">
             <span className="text-white font-semibold text-lg">{product.prix} €</span>
-            <span className="text-xs text-[#ff9ed5] font-medium group-hover:underline">Voir →</span>
+            <span className="text-xs text-[#ff9ed5] font-medium group-hover:underline">{t(tr.product_see)}</span>
           </div>
         </div>
       </div>
