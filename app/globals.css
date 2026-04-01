@@ -49,6 +49,19 @@ h1, h2, h3, h4 {
   animation: shimmer 3s linear infinite;
 }
 
+/* Infinite marquee */
+@keyframes marquee {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.marquee-track {
+  animation: marquee 25s linear infinite;
+  will-change: transform;
+}
+.marquee-track:hover {
+  animation-play-state: paused;
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
