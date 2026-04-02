@@ -22,6 +22,29 @@ const COUNTRIES = [
   { code: "CA", label: "Canada" },
 ];
 
+const EU_COUNTRIES = ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"];
+
+// Fallback rates when Sendcloud has no carrier contracts configured
+function getFallbackRates(country: string): ShippingRate[] {
+  if (country === "FR") {
+    return [
+      { id: -1, name: "Colissimo Domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
+      { id: -2, name: "Mondial Relay - Point Relais", carrier: "mondial_relay", price: 3.90, min_days: 3, max_days: 5 },
+      { id: -3, name: "Colissimo Signature", carrier: "colissimo", price: 6.90, min_days: 2, max_days: 3 },
+    ];
+  }
+  if (EU_COUNTRIES.includes(country) || country === "GB") {
+    return [
+      { id: -10, name: "Colissimo International", carrier: "colissimo", price: 9.90, min_days: 3, max_days: 7 },
+      { id: -11, name: "Colissimo International Signature", carrier: "colissimo", price: 12.90, min_days: 3, max_days: 7 },
+    ];
+  }
+  // US, CA, rest of world
+  return [
+    { id: -20, name: "Colissimo International", carrier: "colissimo", price: 19.90, min_days: 5, max_days: 12 },
+  ];
+}
+
 type Step = "address" | "shipping" | "confirm";
 
 export default function Commande() {
@@ -46,9 +69,9 @@ export default function Commande() {
     return acc + (product?.poids ?? 0.2) * item.quantity;
   }, 0);
 
-  // Free shipping threshold
+  // Free shipping threshold — France métropolitaine only
   const orderTotal = total();
-  const freeShipping = orderTotal >= 50;
+  const freeShipping = orderTotal >= 50 && form.pays === "FR";
 
   const fetchRates = async () => {
     setRatesLoading(true);
@@ -59,11 +82,21 @@ export default function Commande() {
         body: JSON.stringify({ weightKg: totalWeight, toCountry: form.pays }),
       });
       const data = await res.json();
-      setRates(data.rates ?? []);
+      let fetchedRates: ShippingRate[] = data.rates ?? [];
+
+      // Fallback: if Sendcloud returns nothing (no carrier contracts yet), use static rates
+      if (fetchedRates.length === 0) {
+        fetchedRates = getFallbackRates(form.pays);
+      }
+
+      setRates(fetchedRates);
       // Auto-select first (cheapest)
-      if (data.rates?.length > 0) setSelectedRate(data.rates[0]);
+      if (fetchedRates.length > 0) setSelectedRate(fetchedRates[0]);
     } catch {
-      setRates([]);
+      // Network error — use fallback rates
+      const fallback = getFallbackRates(form.pays);
+      setRates(fallback);
+      if (fallback.length > 0) setSelectedRate(fallback[0]);
     } finally {
       setRatesLoading(false);
     }
@@ -71,8 +104,16 @@ export default function Commande() {
 
   const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetchRates();
-    setStep("shipping");
+    const isFreeShipping = orderTotal >= 50 && form.pays === "FR";
+    if (isFreeShipping) {
+      // No need to fetch carrier rates — shipping is free for France ≥50€
+      setSelectedRate({ id: 0, name: t({ fr: "Livraison standard offerte", en: "Free standard shipping" }), carrier: "", price: 0, min_days: 2, max_days: 4 });
+      setRates([]);
+      setStep("shipping");
+    } else {
+      await fetchRates();
+      setStep("shipping");
+    }
   };
 
   const handlePayment = async () => {
@@ -201,13 +242,32 @@ export default function Commande() {
           {/* ── STEP 2: Shipping ── */}
           {step === "shipping" && (
             <div className="flex flex-col gap-4">
-              {freeShipping && (
-                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm font-medium">
-                  🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
-                </div>
-              )}
-
-              {ratesLoading ? (
+              {freeShipping ? (
+                <>
+                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm font-medium">
+                    🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
+                  </div>
+                  {/* Auto-selected free shipping card */}
+                  <div className="w-full text-left bg-[#111] border border-[#ff9ed5] rounded-xl p-4 shadow-[0_0_15px_rgba(255,158,213,0.15)]">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-4 h-4 rounded-full border-2 flex-shrink-0 border-[#ff9ed5] bg-[#ff9ed5]" />
+                        <div>
+                          <p className="text-white font-medium text-sm">
+                            {t({ fr: "Livraison standard offerte", en: "Free standard shipping" })}
+                          </p>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {t({ fr: "3–5 jours ouvrés", en: "3–5 business days" })}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="font-semibold text-sm text-green-400">
+                        {t({ fr: "Gratuit", en: "Free" })}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : ratesLoading ? (
                 <div className="text-center py-10 text-gray-400 text-sm">
                   {t({ fr: "Chargement des options de livraison...", en: "Loading shipping options..." })}
                 </div>
@@ -216,39 +276,36 @@ export default function Commande() {
                   {t({ fr: "Aucune option disponible pour cette destination.", en: "No options available for this destination." })}
                 </div>
               ) : (
-                rates.map((rate) => {
-                  const price = freeShipping ? 0 : rate.price;
-                  return (
-                    <button
-                      key={rate.id}
-                      onClick={() => setSelectedRate(rate)}
-                      className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
-                        selectedRate?.id === rate.id
-                          ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
-                          : "border-[#1f1f1f] hover:border-white/20"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
-                            selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
-                          }`} />
-                          <div>
-                            <p className="text-white font-medium text-sm">{rate.name}</p>
-                            <p className="text-gray-500 text-xs mt-0.5">
-                              {rate.min_days === rate.max_days
-                                ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
-                                : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
-                            </p>
-                          </div>
+                rates.map((rate) => (
+                  <button
+                    key={rate.id}
+                    onClick={() => setSelectedRate(rate)}
+                    className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
+                      selectedRate?.id === rate.id
+                        ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
+                        : "border-[#1f1f1f] hover:border-white/20"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                          selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
+                        }`} />
+                        <div>
+                          <p className="text-white font-medium text-sm">{rate.name}</p>
+                          <p className="text-gray-500 text-xs mt-0.5">
+                            {rate.min_days === rate.max_days
+                              ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
+                              : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
+                          </p>
                         </div>
-                        <span className={`font-semibold text-sm ${price === 0 ? "text-green-400" : "text-white"}`}>
-                          {price === 0 ? t({ fr: "Gratuit", en: "Free" }) : `${price.toFixed(2)} €`}
-                        </span>
                       </div>
-                    </button>
-                  );
-                })
+                      <span className="font-semibold text-sm text-white">
+                        {rate.price.toFixed(2)} €
+                      </span>
+                    </div>
+                  </button>
+                ))
               )}
 
               <div className="flex gap-3 mt-2">
@@ -258,7 +315,7 @@ export default function Commande() {
                 </button>
                 <button
                   onClick={() => setStep("confirm")}
-                  disabled={!selectedRate && rates.length > 0}
+                  disabled={!freeShipping && !selectedRate && rates.length > 0}
                   className="flex-1 btn-shimmer text-[#0a0a0a] font-semibold py-3.5 rounded-lg text-sm disabled:opacity-40">
                   {t({ fr: "Confirmer →", en: "Confirm →" })}
                 </button>

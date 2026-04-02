@@ -4,8 +4,8 @@ export type T = { fr: string; en: string };
 export const tr = {
   // ─── ANNOUNCEMENT BAR ────────────────────────────────────────────
   announcement: {
-    fr: "🚚 Livraison offerte dès 50€  ·  Expédition sous 48h",
-    en: "🚚 Free shipping from €50  ·  Ships within 48h",
+    fr: "🚚 Livraison offerte dès 50€ en France  ·  Expédition sous 48h",
+    en: "🚚 Free shipping from €50 in France  ·  Ships within 48h",
   },
 
   // ─── NAVBAR ──────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ export const tr = {
   // ─── PRODUCT PAGE ────────────────────────────────────────────────
   product_add:          { fr: "Ajouter au panier",          en: "Add to cart"              },
   product_added:        { fr: "Ajouté au panier ✓",         en: "Added to cart ✓"          },
-  product_delivery_free:{ fr: "✓ Livraison offerte dès 50€",en: "✓ Free shipping from €50" },
+  product_delivery_free:{ fr: "✓ Livraison offerte dès 50€ en France",en: "✓ Free shipping from €50 in France" },
   product_delivery_time:{ fr: "✓ Expédition sous 48h ouvrées", en: "✓ Ships within 48 business hours" },
   product_returns:      { fr: "✓ Retours gratuits sous 30 jours", en: "✓ Free returns within 30 days" },
   product_reviews:      { fr: "Avis clients",               en: "Customer reviews"         },

@@ -33,7 +33,8 @@
       "WebFetch(domain:api.boxtal.com)",
       "WebFetch(domain:developers.boxtal.com)",
       "WebSearch",
-      "WebFetch(domain:developer.boxtal.com)"
+      "WebFetch(domain:developer.boxtal.com)",
+      "Bash(npx next:*)"
     ]
   }
 }
