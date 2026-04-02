@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useCartStore } from "@/lib/cartStore";
+import { getProductBySlug } from "@/lib/products";
 import { useT } from "@/hooks/useT";
 import { tr } from "@/lib/i18n";
+import type { ShippingRate } from "@/app/api/shipping-rates/route";
 
 const COUNTRIES = [
   { code: "FR", label: "France" },
@@ -20,9 +22,15 @@ const COUNTRIES = [
   { code: "CA", label: "Canada" },
 ];
 
+type Step = "address" | "shipping" | "confirm";
+
 export default function Commande() {
   const { items, total } = useCartStore();
-  const [loading, setLoading] = useState(false);
+  const [step, setStep]   = useState<Step>("address");
+  const [loading, setLoading]   = useState(false);
+  const [ratesLoading, setRatesLoading] = useState(false);
+  const [rates, setRates]       = useState<ShippingRate[]>([]);
+  const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
   });
@@ -32,10 +40,45 @@ export default function Commande() {
     "w-full px-4 py-3 rounded-lg border border-white/10 bg-[#1a1a1a] text-white text-sm focus:outline-none focus:border-[#ff9ed5] placeholder-gray-600";
   const labelClass = "block text-sm font-medium text-gray-300 mb-1.5";
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Total weight of cart
+  const totalWeight = items.reduce((acc, item) => {
+    const product = getProductBySlug(item.slug);
+    return acc + (product?.poids ?? 0.2) * item.quantity;
+  }, 0);
+
+  // Free shipping threshold
+  const orderTotal = total();
+  const freeShipping = orderTotal >= 50;
+
+  const fetchRates = async () => {
+    setRatesLoading(true);
+    try {
+      const res = await fetch("/api/shipping-rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weightKg: totalWeight, toCountry: form.pays }),
+      });
+      const data = await res.json();
+      setRates(data.rates ?? []);
+      // Auto-select first (cheapest)
+      if (data.rates?.length > 0) setSelectedRate(data.rates[0]);
+    } catch {
+      setRates([]);
+    } finally {
+      setRatesLoading(false);
+    }
+  };
+
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    await fetchRates();
+    setStep("shipping");
+  };
+
+  const handlePayment = async () => {
     setLoading(true);
     try {
+      const shippingCost = freeShipping ? 0 : (selectedRate?.price ?? 4.9);
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,6 +90,9 @@ export default function Commande() {
           ville:   form.ville,
           cp:      form.cp,
           pays:    form.pays,
+          shippingMethodId:   selectedRate?.id,
+          shippingMethodName: selectedRate?.name,
+          shippingCost,
         }),
       });
       const data = await res.json();
@@ -71,73 +117,203 @@ export default function Commande() {
     );
   }
 
+  const shippingCost = freeShipping ? 0 : (selectedRate?.price ?? null);
+
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
-      <h1 className="font-playfair text-4xl font-bold text-white mb-10">{t(tr.checkout_title)}</h1>
+      <h1 className="font-playfair text-4xl font-bold text-white mb-2">{t(tr.checkout_title)}</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          <div>
-            <label className={labelClass}>{t(tr.checkout_name_label)}</label>
-            <input type="text" required value={form.nom}
-              onChange={(e) => setForm({ ...form, nom: e.target.value })}
-              className={inputClass} placeholder={t(tr.checkout_name_ph)} />
-          </div>
-          <div>
-            <label className={labelClass}>Email</label>
-            <input type="email" required value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className={inputClass} placeholder={t(tr.checkout_email_ph)} />
-          </div>
-          <div>
-            <label className={labelClass}>{t(tr.checkout_addr_label)}</label>
-            <input type="text" required value={form.adresse}
-              onChange={(e) => setForm({ ...form, adresse: e.target.value })}
-              className={inputClass} placeholder={t(tr.checkout_addr_ph)} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>{t(tr.checkout_zip_label)}</label>
-              <input type="text" required value={form.cp}
-                onChange={(e) => setForm({ ...form, cp: e.target.value })}
-                className={inputClass} placeholder={t(tr.checkout_zip_ph)} />
+      {/* Steps indicator */}
+      <div className="flex items-center gap-2 mb-10 text-sm">
+        {(["address", "shipping", "confirm"] as Step[]).map((s, i) => {
+          const labels = { address: t({ fr: "Adresse", en: "Address" }), shipping: t({ fr: "Livraison", en: "Shipping" }), confirm: t({ fr: "Paiement", en: "Payment" }) };
+          const active = s === step;
+          const done   = (step === "shipping" && s === "address") || (step === "confirm" && s !== "confirm");
+          return (
+            <div key={s} className="flex items-center gap-2">
+              {i > 0 && <div className="w-8 h-px bg-white/20" />}
+              <span className={`flex items-center gap-1.5 font-medium ${active ? "text-[#ff9ed5]" : done ? "text-gray-400" : "text-gray-600"}`}>
+                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs border ${active ? "border-[#ff9ed5] text-[#ff9ed5]" : done ? "border-gray-400 text-gray-400" : "border-gray-600 text-gray-600"}`}>
+                  {done ? "✓" : i + 1}
+                </span>
+                {labels[s]}
+              </span>
             </div>
-            <div>
-              <label className={labelClass}>{t(tr.checkout_city_label)}</label>
-              <input type="text" required value={form.ville}
-                onChange={(e) => setForm({ ...form, ville: e.target.value })}
-                className={inputClass} placeholder={t(tr.checkout_city_ph)} />
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+        {/* Left: form */}
+        <div className="lg:col-span-2">
+
+          {/* ── STEP 1: Address ── */}
+          {step === "address" && (
+            <form onSubmit={handleAddressSubmit} className="flex flex-col gap-5">
+              <div>
+                <label className={labelClass}>{t(tr.checkout_name_label)}</label>
+                <input type="text" required value={form.nom}
+                  onChange={(e) => setForm({ ...form, nom: e.target.value })}
+                  className={inputClass} placeholder={t(tr.checkout_name_ph)} />
+              </div>
+              <div>
+                <label className={labelClass}>Email</label>
+                <input type="email" required value={form.email}
+                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  className={inputClass} placeholder={t(tr.checkout_email_ph)} />
+              </div>
+              <div>
+                <label className={labelClass}>{t(tr.checkout_addr_label)}</label>
+                <input type="text" required value={form.adresse}
+                  onChange={(e) => setForm({ ...form, adresse: e.target.value })}
+                  className={inputClass} placeholder={t(tr.checkout_addr_ph)} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelClass}>{t(tr.checkout_zip_label)}</label>
+                  <input type="text" required value={form.cp}
+                    onChange={(e) => setForm({ ...form, cp: e.target.value })}
+                    className={inputClass} placeholder={t(tr.checkout_zip_ph)} />
+                </div>
+                <div>
+                  <label className={labelClass}>{t(tr.checkout_city_label)}</label>
+                  <input type="text" required value={form.ville}
+                    onChange={(e) => setForm({ ...form, ville: e.target.value })}
+                    className={inputClass} placeholder={t(tr.checkout_city_ph)} />
+                </div>
+              </div>
+              <div>
+                <label className={labelClass}>{t({ fr: "Pays", en: "Country" })}</label>
+                <select value={form.pays} onChange={(e) => setForm({ ...form, pays: e.target.value })}
+                  className={inputClass + " cursor-pointer"}>
+                  {COUNTRIES.map((c) => (
+                    <option key={c.code} value={c.code}>{c.label}</option>
+                  ))}
+                </select>
+              </div>
+              <button type="submit"
+                className="mt-2 btn-shimmer text-[#0a0a0a] font-semibold py-4 rounded-lg text-sm">
+                {t({ fr: "Choisir la livraison →", en: "Choose shipping →" })}
+              </button>
+            </form>
+          )}
+
+          {/* ── STEP 2: Shipping ── */}
+          {step === "shipping" && (
+            <div className="flex flex-col gap-4">
+              {freeShipping && (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm font-medium">
+                  🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
+                </div>
+              )}
+
+              {ratesLoading ? (
+                <div className="text-center py-10 text-gray-400 text-sm">
+                  {t({ fr: "Chargement des options de livraison...", en: "Loading shipping options..." })}
+                </div>
+              ) : rates.length === 0 ? (
+                <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-6 text-gray-400 text-sm text-center">
+                  {t({ fr: "Aucune option disponible pour cette destination.", en: "No options available for this destination." })}
+                </div>
+              ) : (
+                rates.map((rate) => {
+                  const price = freeShipping ? 0 : rate.price;
+                  return (
+                    <button
+                      key={rate.id}
+                      onClick={() => setSelectedRate(rate)}
+                      className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
+                        selectedRate?.id === rate.id
+                          ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
+                          : "border-[#1f1f1f] hover:border-white/20"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                            selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
+                          }`} />
+                          <div>
+                            <p className="text-white font-medium text-sm">{rate.name}</p>
+                            <p className="text-gray-500 text-xs mt-0.5">
+                              {rate.min_days === rate.max_days
+                                ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
+                                : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`font-semibold text-sm ${price === 0 ? "text-green-400" : "text-white"}`}>
+                          {price === 0 ? t({ fr: "Gratuit", en: "Free" }) : `${price.toFixed(2)} €`}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+
+              <div className="flex gap-3 mt-2">
+                <button onClick={() => setStep("address")}
+                  className="flex-1 border border-white/10 text-gray-400 font-medium py-3.5 rounded-lg text-sm hover:border-white/30 transition-colors">
+                  ← {t({ fr: "Retour", en: "Back" })}
+                </button>
+                <button
+                  onClick={() => setStep("confirm")}
+                  disabled={!selectedRate && rates.length > 0}
+                  className="flex-1 btn-shimmer text-[#0a0a0a] font-semibold py-3.5 rounded-lg text-sm disabled:opacity-40">
+                  {t({ fr: "Confirmer →", en: "Confirm →" })}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Country */}
-          <div>
-            <label className={labelClass}>
-              {t({ fr: "Pays", en: "Country" })}
-            </label>
-            <select
-              value={form.pays}
-              onChange={(e) => setForm({ ...form, pays: e.target.value })}
-              className={inputClass + " cursor-pointer"}
-            >
-              {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>{c.label}</option>
-              ))}
-            </select>
-          </div>
+          {/* ── STEP 3: Confirm & pay ── */}
+          {step === "confirm" && (
+            <div className="flex flex-col gap-5">
+              {/* Address recap */}
+              <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-white font-medium text-sm">{t({ fr: "Adresse de livraison", en: "Delivery address" })}</h3>
+                  <button onClick={() => setStep("address")} className="text-[#ff9ed5] text-xs hover:underline">
+                    {t({ fr: "Modifier", en: "Edit" })}
+                  </button>
+                </div>
+                <p className="text-gray-400 text-sm">{form.nom}</p>
+                <p className="text-gray-400 text-sm">{form.adresse}</p>
+                <p className="text-gray-400 text-sm">{form.cp} {form.ville}</p>
+                <p className="text-gray-400 text-sm">{COUNTRIES.find(c => c.code === form.pays)?.label}</p>
+              </div>
 
-          <button type="submit" disabled={loading}
-            className="mt-2 btn-shimmer text-[#0a0a0a] font-semibold py-4 rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed">
-            {loading ? t(tr.checkout_paying) : t(tr.checkout_pay)}
-          </button>
-          <p className="text-xs text-gray-500 text-center">{t(tr.checkout_secure)}</p>
-        </form>
+              {/* Shipping recap */}
+              {selectedRate && (
+                <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-white font-medium text-sm">{t({ fr: "Mode de livraison", en: "Shipping method" })}</h3>
+                    <button onClick={() => setStep("shipping")} className="text-[#ff9ed5] text-xs hover:underline">
+                      {t({ fr: "Modifier", en: "Edit" })}
+                    </button>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-400">{selectedRate.name}</span>
+                    <span className={freeShipping ? "text-green-400" : "text-white"}>
+                      {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${selectedRate.price.toFixed(2)} €`}
+                    </span>
+                  </div>
+                </div>
+              )}
 
-        {/* Order summary */}
-        <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-6 h-fit">
+              <button onClick={handlePayment} disabled={loading}
+                className="btn-shimmer text-[#0a0a0a] font-semibold py-4 rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed">
+                {loading ? t(tr.checkout_paying) : t(tr.checkout_pay)}
+              </button>
+              <p className="text-xs text-gray-500 text-center">{t(tr.checkout_secure)}</p>
+            </div>
+          )}
+        </div>
+
+        {/* Right: order summary */}
+        <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-6 h-fit sticky top-24">
           <h2 className="font-playfair text-xl font-bold text-white mb-5">{t(tr.checkout_order_title)}</h2>
-          <div className="flex flex-col gap-3 mb-5">
+          <div className="flex flex-col gap-3 mb-4">
             {items.map((item) => (
               <div key={item.slug} className="flex justify-between text-sm">
                 <span className="text-gray-400">{item.nom} × {item.quantity}</span>
@@ -145,9 +321,30 @@ export default function Commande() {
               </div>
             ))}
           </div>
-          <div className="border-t border-white/[0.08] pt-4 flex justify-between font-semibold text-white">
-            <span>{t(tr.cart_total)}</span>
-            <span>{total() >= 50 ? total().toFixed(2) : (total() + 4.9).toFixed(2)} €</span>
+          <div className="border-t border-white/[0.08] pt-3 flex flex-col gap-2">
+            <div className="flex justify-between text-sm text-gray-400">
+              <span>{t(tr.cart_subtotal)}</span>
+              <span>{orderTotal.toFixed(2)} €</span>
+            </div>
+            <div className="flex justify-between text-sm text-gray-400">
+              <span>{t(tr.cart_shipping)}</span>
+              <span className={freeShipping ? "text-green-400" : "text-white"}>
+                {freeShipping
+                  ? t(tr.cart_shipping_free)
+                  : shippingCost !== null
+                    ? `${shippingCost.toFixed(2)} €`
+                    : "—"}
+              </span>
+            </div>
+            <div className="flex justify-between font-semibold text-white pt-1 border-t border-white/[0.08]">
+              <span>{t(tr.cart_total)}</span>
+              <span>
+                {(freeShipping
+                  ? orderTotal
+                  : orderTotal + (shippingCost ?? 0)
+                ).toFixed(2)} €
+              </span>
+            </div>
           </div>
         </div>
       </div>

@@ -4,8 +4,8 @@ export type T = { fr: string; en: string };
 export const tr = {
   // ─── ANNOUNCEMENT BAR ────────────────────────────────────────────
   announcement: {
-    fr: "🚚 Livraison offerte dès 50€  ·  Expédition sous 48h  ·  Retours gratuits 30 jours",
-    en: "🚚 Free shipping from €50  ·  Ships within 48h  ·  Free returns 30 days",
+    fr: "🚚 Livraison offerte dès 50€  ·  Expédition sous 48h",
+    en: "🚚 Free shipping from €50  ·  Ships within 48h",
   },
 
   // ─── NAVBAR ──────────────────────────────────────────────────────

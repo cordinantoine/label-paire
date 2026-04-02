@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       apiVersion: "2026-02-25.clover",
     });
 
-    const { items, email, nom, adresse, ville, cp, pays } = await req.json();
+    const { items, email, nom, adresse, ville, cp, pays, shippingMethodId, shippingMethodName, shippingCost } = await req.json();
 
     const lineItems = items.map(
       (item: { nom: string; prix: number; quantity: number }) => ({
@@ -20,6 +20,18 @@ export async function POST(req: NextRequest) {
         quantity: item.quantity,
       })
     );
+
+    // Add shipping as a line item if not free
+    if (shippingCost && shippingCost > 0) {
+      lineItems.push({
+        price_data: {
+          currency: "eur",
+          product_data: { name: shippingMethodName ?? "Livraison" },
+          unit_amount: Math.round(shippingCost * 100),
+        },
+        quantity: 1,
+      });
+    }
 
     // Build items metadata with weight for Sendcloud
     const itemsWithPoids = items.map(
@@ -44,8 +56,10 @@ export async function POST(req: NextRequest) {
         adresse: adresse ?? "",
         ville:   ville   ?? "",
         cp:      cp      ?? "",
-        pays:    pays    ?? "FR",
-        items:   JSON.stringify(itemsWithPoids),
+        pays:              pays               ?? "FR",
+        items:             JSON.stringify(itemsWithPoids),
+        shipping_method_id: String(shippingMethodId ?? ""),
+        shipping_method:   shippingMethodName ?? "",
       },
       success_url: `${baseUrl}/commande/succes?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${baseUrl}/panier`,
