@@ -6,6 +6,7 @@ import { getProductBySlug } from "@/lib/products";
 import { useT } from "@/hooks/useT";
 import { tr } from "@/lib/i18n";
 import type { ShippingRate } from "@/app/api/shipping-rates/route";
+import type { ServicePoint } from "@/app/api/service-points/route";
 
 const COUNTRIES = [
   { code: "FR", label: "France" },
@@ -24,12 +25,19 @@ const COUNTRIES = [
 
 const EU_COUNTRIES = ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"];
 
+const RELAY_CARRIERS = ["mondial_relay"];
+
+function isRelayCarrier(rate: ShippingRate | null) {
+  if (!rate) return false;
+  return RELAY_CARRIERS.includes(rate.carrier) || rate.name.toLowerCase().includes("relais") || rate.name.toLowerCase().includes("relay");
+}
+
 // Fallback rates when Sendcloud has no carrier contracts configured
 function getFallbackRates(country: string): ShippingRate[] {
   if (country === "FR") {
     return [
-      { id: -1, name: "Colissimo Domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
       { id: -2, name: "Mondial Relay - Point Relais", carrier: "mondial_relay", price: 3.90, min_days: 3, max_days: 5 },
+      { id: -1, name: "Colissimo Domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
       { id: -3, name: "Colissimo Signature", carrier: "colissimo", price: 6.90, min_days: 2, max_days: 3 },
     ];
   }
@@ -39,7 +47,6 @@ function getFallbackRates(country: string): ShippingRate[] {
       { id: -11, name: "Colissimo International Signature", carrier: "colissimo", price: 12.90, min_days: 3, max_days: 7 },
     ];
   }
-  // US, CA, rest of world
   return [
     { id: -20, name: "Colissimo International", carrier: "colissimo", price: 19.90, min_days: 5, max_days: 12 },
   ];
@@ -54,6 +61,12 @@ export default function Commande() {
   const [ratesLoading, setRatesLoading] = useState(false);
   const [rates, setRates]       = useState<ShippingRate[]>([]);
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
+
+  // Relay point state
+  const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
+  const [servicePointsLoading, setServicePointsLoading] = useState(false);
+  const [selectedServicePoint, setSelectedServicePoint] = useState<ServicePoint | null>(null);
+
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
   });
@@ -73,6 +86,29 @@ export default function Commande() {
   const orderTotal = total();
   const freeShipping = orderTotal >= 50 && form.pays === "FR";
 
+  // When relay carrier selected, fetch service points
+  const handleRateSelect = async (rate: ShippingRate) => {
+    setSelectedRate(rate);
+    setSelectedServicePoint(null);
+
+    if (isRelayCarrier(rate) && form.cp) {
+      setServicePointsLoading(true);
+      try {
+        const res = await fetch("/api/service-points", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ postalCode: form.cp, country: form.pays, carrier: rate.carrier }),
+        });
+        const data = await res.json();
+        setServicePoints(data.points ?? []);
+      } catch {
+        setServicePoints([]);
+      } finally {
+        setServicePointsLoading(false);
+      }
+    }
+  };
+
   const fetchRates = async () => {
     setRatesLoading(true);
     try {
@@ -84,19 +120,19 @@ export default function Commande() {
       const data = await res.json();
       let fetchedRates: ShippingRate[] = data.rates ?? [];
 
-      // Fallback: if Sendcloud returns nothing (no carrier contracts yet), use static rates
       if (fetchedRates.length === 0) {
         fetchedRates = getFallbackRates(form.pays);
       }
 
       setRates(fetchedRates);
-      // Auto-select first (cheapest)
-      if (fetchedRates.length > 0) setSelectedRate(fetchedRates[0]);
+      if (fetchedRates.length > 0) {
+        // Auto-select first, trigger relay fetch if needed
+        await handleRateSelect(fetchedRates[0]);
+      }
     } catch {
-      // Network error — use fallback rates
       const fallback = getFallbackRates(form.pays);
       setRates(fallback);
-      if (fallback.length > 0) setSelectedRate(fallback[0]);
+      if (fallback.length > 0) await handleRateSelect(fallback[0]);
     } finally {
       setRatesLoading(false);
     }
@@ -106,7 +142,6 @@ export default function Commande() {
     e.preventDefault();
     const isFreeShipping = orderTotal >= 50 && form.pays === "FR";
     if (isFreeShipping) {
-      // No need to fetch carrier rates — shipping is free for France ≥50€
       setSelectedRate({ id: 0, name: t({ fr: "Livraison standard offerte", en: "Free standard shipping" }), carrier: "", price: 0, min_days: 2, max_days: 4 });
       setRates([]);
       setStep("shipping");
@@ -115,6 +150,11 @@ export default function Commande() {
       setStep("shipping");
     }
   };
+
+  // Can proceed to confirm?
+  const canConfirm = freeShipping || (
+    selectedRate !== null && (!isRelayCarrier(selectedRate) || selectedServicePoint !== null)
+  );
 
   const handlePayment = async () => {
     setLoading(true);
@@ -134,6 +174,8 @@ export default function Commande() {
           shippingMethodId:   selectedRate?.id,
           shippingMethodName: selectedRate?.name,
           shippingCost,
+          servicePointId:   selectedServicePoint?.id ?? null,
+          servicePointName: selectedServicePoint ? `${selectedServicePoint.name} — ${selectedServicePoint.street} ${selectedServicePoint.house_number}, ${selectedServicePoint.city}` : null,
         }),
       });
       const data = await res.json();
@@ -247,7 +289,6 @@ export default function Commande() {
                   <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm font-medium">
                     🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
                   </div>
-                  {/* Auto-selected free shipping card */}
                   <div className="w-full text-left bg-[#111] border border-[#ff9ed5] rounded-xl p-4 shadow-[0_0_15px_rgba(255,158,213,0.15)]">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -257,7 +298,7 @@ export default function Commande() {
                             {t({ fr: "Livraison standard offerte", en: "Free standard shipping" })}
                           </p>
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {t({ fr: "3–5 jours ouvrés", en: "3–5 business days" })}
+                            {t({ fr: "2–4 jours ouvrés", en: "2–4 business days" })}
                           </p>
                         </div>
                       </div>
@@ -271,41 +312,85 @@ export default function Commande() {
                 <div className="text-center py-10 text-gray-400 text-sm">
                   {t({ fr: "Chargement des options de livraison...", en: "Loading shipping options..." })}
                 </div>
-              ) : rates.length === 0 ? (
-                <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-6 text-gray-400 text-sm text-center">
-                  {t({ fr: "Aucune option disponible pour cette destination.", en: "No options available for this destination." })}
-                </div>
               ) : (
-                rates.map((rate) => (
-                  <button
-                    key={rate.id}
-                    onClick={() => setSelectedRate(rate)}
-                    className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
-                      selectedRate?.id === rate.id
-                        ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
-                        : "border-[#1f1f1f] hover:border-white/20"
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
-                          selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
-                        }`} />
-                        <div>
-                          <p className="text-white font-medium text-sm">{rate.name}</p>
-                          <p className="text-gray-500 text-xs mt-0.5">
-                            {rate.min_days === rate.max_days
-                              ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
-                              : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
-                          </p>
+                <>
+                  {rates.map((rate) => (
+                    <div key={rate.id} className="flex flex-col gap-0">
+                      <button
+                        onClick={() => handleRateSelect(rate)}
+                        className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
+                          selectedRate?.id === rate.id
+                            ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
+                            : "border-[#1f1f1f] hover:border-white/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                              selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
+                            }`} />
+                            <div>
+                              <p className="text-white font-medium text-sm">{rate.name}</p>
+                              <p className="text-gray-500 text-xs mt-0.5">
+                                {rate.min_days === rate.max_days
+                                  ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
+                                  : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
+                              </p>
+                            </div>
+                          </div>
+                          <span className="font-semibold text-sm text-white">
+                            {rate.price.toFixed(2)} €
+                          </span>
                         </div>
-                      </div>
-                      <span className="font-semibold text-sm text-white">
-                        {rate.price.toFixed(2)} €
-                      </span>
+                      </button>
+
+                      {/* ── Relay point picker (inline, under the selected relay option) ── */}
+                      {selectedRate?.id === rate.id && isRelayCarrier(rate) && (
+                        <div className="bg-[#0d0d0d] border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3 flex flex-col gap-2">
+                          <p className="text-xs text-gray-400 font-medium mb-1">
+                            📍 {t({ fr: "Choisissez votre point relais", en: "Choose your relay point" })}
+                          </p>
+
+                          {servicePointsLoading ? (
+                            <div className="text-center py-4 text-gray-500 text-xs">
+                              {t({ fr: "Recherche des points relais proches...", en: "Looking for nearby relay points..." })}
+                            </div>
+                          ) : servicePoints.length === 0 ? (
+                            <div className="text-center py-3 text-gray-500 text-xs">
+                              {t({ fr: "Aucun point relais trouvé. Veuillez choisir une autre option de livraison.", en: "No relay points found. Please choose another shipping option." })}
+                            </div>
+                          ) : (
+                            servicePoints.map((sp) => (
+                              <button
+                                key={sp.id}
+                                onClick={() => setSelectedServicePoint(sp)}
+                                className={`w-full text-left rounded-lg px-3 py-2.5 border transition-all text-sm ${
+                                  selectedServicePoint?.id === sp.id
+                                    ? "border-[#ff9ed5] bg-[#ff9ed5]/5 text-white"
+                                    : "border-white/10 hover:border-white/25 text-gray-300"
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div>
+                                    <span className={`font-medium text-xs ${selectedServicePoint?.id === sp.id ? "text-[#ff9ed5]" : "text-white"}`}>
+                                      {sp.name}
+                                    </span>
+                                    <p className="text-gray-500 text-xs mt-0.5">
+                                      {sp.street} {sp.house_number}, {sp.postal_code} {sp.city}
+                                    </p>
+                                  </div>
+                                  {selectedServicePoint?.id === sp.id && (
+                                    <span className="text-[#ff9ed5] text-xs mt-0.5 flex-shrink-0">✓</span>
+                                  )}
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
                     </div>
-                  </button>
-                ))
+                  ))}
+                </>
               )}
 
               <div className="flex gap-3 mt-2">
@@ -315,11 +400,18 @@ export default function Commande() {
                 </button>
                 <button
                   onClick={() => setStep("confirm")}
-                  disabled={!freeShipping && !selectedRate && rates.length > 0}
-                  className="flex-1 btn-shimmer text-[#0a0a0a] font-semibold py-3.5 rounded-lg text-sm disabled:opacity-40">
+                  disabled={!canConfirm}
+                  className="flex-1 btn-shimmer text-[#0a0a0a] font-semibold py-3.5 rounded-lg text-sm disabled:opacity-40 disabled:cursor-not-allowed">
                   {t({ fr: "Confirmer →", en: "Confirm →" })}
                 </button>
               </div>
+
+              {/* Hint when relay is selected but no point chosen yet */}
+              {selectedRate && isRelayCarrier(selectedRate) && !selectedServicePoint && !servicePointsLoading && servicePoints.length > 0 && (
+                <p className="text-xs text-amber-400/80 text-center -mt-1">
+                  {t({ fr: "Veuillez sélectionner un point relais pour continuer.", en: "Please select a relay point to continue." })}
+                </p>
+              )}
             </div>
           )}
 
@@ -355,6 +447,13 @@ export default function Commande() {
                       {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${selectedRate.price.toFixed(2)} €`}
                     </span>
                   </div>
+                  {selectedServicePoint && (
+                    <div className="mt-2 pt-2 border-t border-white/[0.06]">
+                      <p className="text-xs text-gray-500">{t({ fr: "Point relais", en: "Relay point" })}</p>
+                      <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedServicePoint.name}</p>
+                      <p className="text-xs text-gray-500">{selectedServicePoint.street} {selectedServicePoint.house_number}, {selectedServicePoint.postal_code} {selectedServicePoint.city}</p>
+                    </div>
+                  )}
                 </div>
               )}
 
