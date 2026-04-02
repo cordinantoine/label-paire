@@ -17,6 +17,7 @@ export const products: Product[] = [
     description:
       "Notre kit complet présenté dans sa trousse en cuir élégante. Contient : La Belle Mousse, deux brosses (douce et dure), un chiffon microfibre, un chausse-pieds, des embauchoirs, Le Tampon Blanc et La Belle Crème. Tout le nécessaire pour garder vos sneakers en parfait état.",
     badge: "Bestseller",
+    image: "/products/kit-reparation-premium.png",
   },
   {
     slug: "kit-reparation",
@@ -84,6 +85,7 @@ export const products: Product[] = [
     description:
       "Embauchoirs en bois pour maintenir la forme de vos sneakers entre les portés. Absorbent l'humidité et préviennent les plis. Compatible toutes pointures.",
     badge: null,
+    image: "/products/paire-embauchoirs.jpeg",
   },
   {
     slug: "spray-impermeabilisant",
