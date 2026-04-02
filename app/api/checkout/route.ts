@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
       customer_email: email,
       line_items: lineItems,
       metadata: { nom, email },
-      success_url: `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/commande/succes?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000"}/panier`,
+      success_url: `${process.env.NEXT_PUBLIC_BASE_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")}/commande/succes?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")}/panier`,
     });
 
     return NextResponse.json({ url: session.url });
