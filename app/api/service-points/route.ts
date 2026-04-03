@@ -9,56 +9,80 @@ export type ServicePoint = {
   postal_code: string;
   latitude: number;
   longitude: number;
-  distance?: number; // meters
+  distance?: number;
   phone?: string;
-  extra?: {
-    formation_flag?: string;
-  };
+  formatted_opening_times?: Record<string, string>;
 };
 
 export async function POST(req: NextRequest) {
   try {
-    const { postalCode, country = "FR", carrier = "mondial_relay" } = await req.json();
+    const { postalCode, country = "FR", carrier } = await req.json();
 
     const publicKey = process.env.SENDCLOUD_PUBLIC_KEY;
     const secretKey = process.env.SENDCLOUD_SECRET_KEY;
 
     if (!publicKey || !secretKey) {
-      return NextResponse.json({ error: "Sendcloud not configured" }, { status: 500 });
+      return NextResponse.json({ points: [] });
     }
 
     const auth = Buffer.from(`${publicKey}:${secretKey}`).toString("base64");
 
-    const url = new URL("https://servicepoints.sendcloud.sc/api/v2/service-points/");
-    url.searchParams.set("country", country);
-    url.searchParams.set("carrier", carrier);
-    url.searchParams.set("postal_code", postalCode);
+    // Try multiple approaches to get service points
+    const attempts = [
+      // 1. With carrier filter + Basic auth
+      ...(carrier ? [buildUrl(country, postalCode, carrier)] : []),
+      // 2. Without carrier filter (returns all carriers) + Basic auth
+      buildUrl(country, postalCode),
+    ];
 
-    const res = await fetch(url.toString(), {
-      headers: { Authorization: `Basic ${auth}` },
-    });
+    for (const url of attempts) {
+      try {
+        const res = await fetch(url, {
+          headers: { Authorization: `Basic ${auth}` },
+        });
 
-    if (!res.ok) {
-      // Fallback: Sendcloud service points API might not need auth for public access
-      const url2 = new URL("https://servicepoints.sendcloud.sc/api/v2/service-points/");
-      url2.searchParams.set("country", country);
-      url2.searchParams.set("carrier", carrier);
-      url2.searchParams.set("postal_code", postalCode);
-      url2.searchParams.set("api_key", publicKey);
+        if (!res.ok) continue;
 
-      const res2 = await fetch(url2.toString());
-      if (!res2.ok) {
-        return NextResponse.json({ points: [] });
+        const data = await res.json();
+        const points = Array.isArray(data) ? data : [];
+
+        if (points.length > 0) {
+          return NextResponse.json({ points: points.slice(0, 10) });
+        }
+      } catch {
+        continue;
       }
-      const data2 = await res2.json();
-      return NextResponse.json({ points: (data2 ?? []).slice(0, 8) });
     }
 
-    const data = await res.json();
-    // Returns array of service points, limit to 8 closest
-    return NextResponse.json({ points: (data ?? []).slice(0, 8) });
+    // 3. Try with api_key query param (public access)
+    const pubUrl = new URL("https://servicepoints.sendcloud.sc/api/v2/service-points/");
+    pubUrl.searchParams.set("country", country);
+    pubUrl.searchParams.set("postal_code", postalCode);
+    pubUrl.searchParams.set("api_key", publicKey);
+    if (carrier) pubUrl.searchParams.set("carrier", carrier);
+
+    try {
+      const res = await fetch(pubUrl.toString());
+      if (res.ok) {
+        const data = await res.json();
+        const points = Array.isArray(data) ? data : [];
+        if (points.length > 0) {
+          return NextResponse.json({ points: points.slice(0, 10) });
+        }
+      }
+    } catch { /* continue */ }
+
+    return NextResponse.json({ points: [] });
   } catch (err) {
     console.error("Service points error:", err);
     return NextResponse.json({ points: [] });
   }
+}
+
+function buildUrl(country: string, postalCode: string, carrier?: string) {
+  const url = new URL("https://servicepoints.sendcloud.sc/api/v2/service-points/");
+  url.searchParams.set("country", country);
+  url.searchParams.set("postal_code", postalCode);
+  if (carrier) url.searchParams.set("carrier", carrier);
+  return url.toString();
 }
