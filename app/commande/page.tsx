@@ -66,6 +66,7 @@ export default function Commande() {
   const [servicePoints, setServicePoints] = useState<ServicePoint[]>([]);
   const [servicePointsLoading, setServicePointsLoading] = useState(false);
   const [selectedServicePoint, setSelectedServicePoint] = useState<ServicePoint | null>(null);
+  const [manualRelayInput, setManualRelayInput] = useState("");
 
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
@@ -153,7 +154,11 @@ export default function Commande() {
 
   // Can proceed to confirm?
   const canConfirm = freeShipping || (
-    selectedRate !== null && (!isRelayCarrier(selectedRate) || selectedServicePoint !== null)
+    selectedRate !== null && (
+      !isRelayCarrier(selectedRate) ||
+      selectedServicePoint !== null ||
+      manualRelayInput.trim().length > 3
+    )
   );
 
   const handlePayment = async () => {
@@ -175,7 +180,9 @@ export default function Commande() {
           shippingMethodName: selectedRate?.name,
           shippingCost,
           servicePointId:   selectedServicePoint?.id ?? null,
-          servicePointName: selectedServicePoint ? `${selectedServicePoint.name} — ${selectedServicePoint.street} ${selectedServicePoint.house_number}, ${selectedServicePoint.city}` : null,
+          servicePointName: selectedServicePoint
+            ? `${selectedServicePoint.name} — ${selectedServicePoint.street} ${selectedServicePoint.house_number}, ${selectedServicePoint.city}`
+            : manualRelayInput.trim() || null,
         }),
       });
       const data = await res.json();
@@ -356,8 +363,31 @@ export default function Commande() {
                               {t({ fr: "Recherche des points relais proches...", en: "Looking for nearby relay points..." })}
                             </div>
                           ) : servicePoints.length === 0 ? (
-                            <div className="text-center py-3 text-gray-500 text-xs">
-                              {t({ fr: "Aucun point relais trouvé. Veuillez choisir une autre option de livraison.", en: "No relay points found. Please choose another shipping option." })}
+                            <div className="flex flex-col gap-2.5 py-1">
+                              <p className="text-gray-500 text-xs">
+                                {t({
+                                  fr: "Trouvez votre point relais sur le site Mondial Relay et indiquez-le ci-dessous :",
+                                  en: "Find your relay point on the Mondial Relay website and enter it below:"
+                                })}
+                              </p>
+                              <a
+                                href={`https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePays=FR&CP=${form.cp}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 text-[#ff9ed5] text-xs font-medium hover:underline"
+                              >
+                                🔍 {t({ fr: "Trouver un point relais →", en: "Find a relay point →" })}
+                              </a>
+                              <input
+                                type="text"
+                                value={manualRelayInput}
+                                onChange={(e) => setManualRelayInput(e.target.value)}
+                                placeholder={t({ fr: "Ex : Tabac Presse Chatou, 12 rue de Paris", en: "E.g.: Tabac Presse Chatou, 12 rue de Paris" })}
+                                className="w-full px-3 py-2.5 rounded-lg border border-white/10 bg-[#1a1a1a] text-white text-xs focus:outline-none focus:border-[#ff9ed5] placeholder-gray-600"
+                              />
+                              {manualRelayInput.trim().length > 3 && (
+                                <p className="text-green-400 text-xs">✓ {t({ fr: "Point relais enregistré", en: "Relay point saved" })}</p>
+                              )}
                             </div>
                           ) : (
                             servicePoints.map((sp) => (
@@ -407,9 +437,9 @@ export default function Commande() {
               </div>
 
               {/* Hint when relay is selected but no point chosen yet */}
-              {selectedRate && isRelayCarrier(selectedRate) && !selectedServicePoint && !servicePointsLoading && servicePoints.length > 0 && (
+              {selectedRate && isRelayCarrier(selectedRate) && !selectedServicePoint && manualRelayInput.trim().length <= 3 && !servicePointsLoading && (
                 <p className="text-xs text-amber-400/80 text-center -mt-1">
-                  {t({ fr: "Veuillez sélectionner un point relais pour continuer.", en: "Please select a relay point to continue." })}
+                  {t({ fr: "Veuillez sélectionner ou saisir un point relais pour continuer.", en: "Please select or enter a relay point to continue." })}
                 </p>
               )}
             </div>
@@ -447,11 +477,17 @@ export default function Commande() {
                       {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${selectedRate.price.toFixed(2)} €`}
                     </span>
                   </div>
-                  {selectedServicePoint && (
+                  {(selectedServicePoint || manualRelayInput.trim()) && (
                     <div className="mt-2 pt-2 border-t border-white/[0.06]">
                       <p className="text-xs text-gray-500">{t({ fr: "Point relais", en: "Relay point" })}</p>
-                      <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedServicePoint.name}</p>
-                      <p className="text-xs text-gray-500">{selectedServicePoint.street} {selectedServicePoint.house_number}, {selectedServicePoint.postal_code} {selectedServicePoint.city}</p>
+                      {selectedServicePoint ? (
+                        <>
+                          <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedServicePoint.name}</p>
+                          <p className="text-xs text-gray-500">{selectedServicePoint.street} {selectedServicePoint.house_number}, {selectedServicePoint.postal_code} {selectedServicePoint.city}</p>
+                        </>
+                      ) : (
+                        <p className="text-xs text-gray-300 mt-0.5 font-medium">{manualRelayInput.trim()}</p>
+                      )}
                     </div>
                   )}
                 </div>
