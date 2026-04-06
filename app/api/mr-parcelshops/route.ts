@@ -34,10 +34,9 @@ export async function POST(req: NextRequest) {
 );
 out body;`;
 
-    const overpassRes = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: `data=${encodeURIComponent(overpassQuery)}`,
+    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
+    const overpassRes = await fetch(overpassUrl, {
+      headers: { "Accept": "application/json" },
     });
 
     const overpassData = await overpassRes.json();
