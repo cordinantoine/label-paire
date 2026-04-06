@@ -27,6 +27,7 @@ export const products: Product[] = [
     description:
       "Le kit essentiel dans sa trousse en cuir : La Belle Mousse, une brosse, un chiffon microfibre, Le Tampon Blanc et La Belle Crème. Pratique et complet pour entretenir votre collection.",
     badge: null,
+    image: "/products/kit-de-reparation.png",
   },
   {
     slug: "kit-nettoyage",
