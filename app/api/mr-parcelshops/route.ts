@@ -1,42 +1,81 @@
 import { NextRequest, NextResponse } from "next/server";
 
-// Proxy Mondial Relay parcelshop API to avoid CORS issues on client
+export type ParcelShop = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  postalCode: string;
+  lat: number;
+  lng: number;
+};
+
 export async function POST(req: NextRequest) {
   try {
-    const { postalCode, country = "FR", nbResults = 10 } = await req.json();
-    const brand = "CC22X0UA";
+    const { postalCode, country = "FR" } = await req.json();
 
-    // Try Mondial Relay widget API (JSON endpoint used internally by their widget)
-    const url = new URL("https://widget.mondialrelay.com/parcelshop-picker/v4_1/api/parcelshops");
-    url.searchParams.set("Brand", brand);
-    url.searchParams.set("Country", country);
-    url.searchParams.set("PostCode", postalCode);
-    url.searchParams.set("NbResults", String(nbResults));
+    // 1. Geocode postal code → coordinates (Nominatim, free, no key)
+    const geocodeUrl = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(postalCode)}&country=${country === "FR" ? "France" : country}&format=json&limit=1`;
+    const geoRes = await fetch(geocodeUrl, {
+      headers: { "User-Agent": "LabelPaire/1.0 contact@labelpaire.fr" },
+    });
+    const geoData = await geoRes.json();
+    if (!geoData || geoData.length === 0) {
+      return NextResponse.json({ points: [] });
+    }
+    const { lat, lon } = geoData[0];
 
-    const res = await fetch(url.toString(), {
-      headers: { Accept: "application/json" },
+    // 2. Find Mondial Relay points nearby (Overpass API, free, no key)
+    const overpassQuery = `[out:json][timeout:20];
+(
+  node["brand"="Mondial Relay"](around:6000,${lat},${lon});
+  node["operator"="Mondial Relay"](around:6000,${lat},${lon});
+  node["name"~"Mondial Relay",i](around:6000,${lat},${lon});
+);
+out body;`;
+
+    const overpassRes = await fetch("https://overpass-api.de/api/interpreter", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: `data=${encodeURIComponent(overpassQuery)}`,
     });
 
-    if (res.ok) {
-      const data = await res.json();
-      // Response shape: { Rd: [ { ID, Nom, Adresse1, Adresse2, CP, Ville, Pays, Latitude, Longitude, ... } ] }
-      const points = (data?.Rd ?? []).map((p: {
-        ID: string; Nom: string; Adresse1: string; Adresse2?: string;
-        CP: string; Ville: string; Pays: string; Latitude: string; Longitude: string;
-      }) => ({
-        id: p.ID,
-        name: p.Nom,
-        address: [p.Adresse1, p.Adresse2].filter(Boolean).join(" "),
-        city: p.Ville,
-        postalCode: p.CP,
-        country: p.Pays,
-        lat: parseFloat(p.Latitude?.replace(",", ".")),
-        lng: parseFloat(p.Longitude?.replace(",", ".")),
-      }));
-      return NextResponse.json({ points });
+    const overpassData = await overpassRes.json();
+    const elements: {
+      id: number; lat: number; lon: number;
+      tags?: { name?: string; addr_street?: string; "addr:street"?: string; "addr:housenumber"?: string; "addr:city"?: string; "addr:postcode"?: string; };
+    }[] = overpassData?.elements ?? [];
+
+    // Deduplicate by proximity and build result
+    const seen = new Set<string>();
+    const points: ParcelShop[] = [];
+
+    for (const el of elements) {
+      const key = `${el.lat.toFixed(4)},${el.lon.toFixed(4)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      const tags = el.tags ?? {};
+      const street = tags["addr:street"] ?? tags["addr_street"] ?? "";
+      const houseNum = tags["addr:housenumber"] ?? "";
+      const city = tags["addr:city"] ?? "";
+      const pc = tags["addr:postcode"] ?? postalCode;
+      const name = tags["name"] ?? "Point Relais Mondial Relay";
+
+      points.push({
+        id: String(el.id),
+        name,
+        address: [street, houseNum].filter(Boolean).join(" "),
+        city,
+        postalCode: pc,
+        lat: el.lat,
+        lng: el.lon,
+      });
+
+      if (points.length >= 10) break;
     }
 
-    return NextResponse.json({ points: [] });
+    return NextResponse.json({ points });
   } catch (err) {
     console.error("MR parcelshops error:", err);
     return NextResponse.json({ points: [] });

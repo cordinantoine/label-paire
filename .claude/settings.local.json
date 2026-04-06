@@ -43,7 +43,13 @@
       "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
       "Bash(claude mcp:*)",
       "Bash(curl -L \"https://raw.githubusercontent.com/ahujasid/blender-mcp/main/addon.py\" -o \"$HOME/Desktop/blender_mcp_addon.py\")",
-      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)"
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)",
+      "Bash(curl -s -X POST http://localhost:3000/api/mr-parcelshops -H \"Content-Type: application/json\" -d '{\"\"\"\"postalCode\"\"\"\":\"\"\"\"78400\"\"\"\",\"\"\"\"country\"\"\"\":\"\"\"\"FR\"\"\"\"}')",
+      "Bash(curl -s \"https://widget.mondialrelay.com/parcelshop-picker/v4_1/api/parcelshops?Brand=CC22X0UA&Country=FR&PostCode=78400&NbResults=5\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://www.mondialrelay.fr/sfd/\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePays=FR&CP=78400\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://widget.mondialrelay.com/parcelshop-picker/v4_1/widget-v4_1.min.js\")",
+      "Bash(curl -s \"https://nominatim.openstreetmap.org/search?postalcode=78400&country=France&format=json&limit=1\" -H \"User-Agent: LabelPaire/1.0\")"
     ]
   }
 }
