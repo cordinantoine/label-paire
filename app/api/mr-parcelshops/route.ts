@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/* ── Types ── */
+export type DayHours = {
+  open1?: string;   // "09:00"
+  close1?: string;  // "12:30"
+  open2?: string;   // "14:00"
+  close2?: string;  // "19:30"
+};
+
 export type ParcelShop = {
   id: string;
   name: string;
@@ -8,75 +16,135 @@ export type ParcelShop = {
   postalCode: string;
   lat: number;
   lng: number;
+  distance: number;       // metres
+  isLocker: boolean;
+  hours: Record<string, DayHours>;   // lundi, mardi, …
 };
 
+const MR_ENSEIGNE = "CC22X0UA";
+const SOAP_URL = "https://api.mondialrelay.com/Web_Services.asmx";
+
+const DAYS = [
+  "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche",
+] as const;
+
+/* ── Helpers ── */
+function extractTag(xml: string, tag: string): string {
+  const re = new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`, "s");
+  const m = xml.match(re);
+  return m ? m[1].trim() : "";
+}
+
+function extractAll(xml: string, tag: string): string[] {
+  const re = new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`, "gs");
+  const results: string[] = [];
+  let m;
+  while ((m = re.exec(xml)) !== null) results.push(m[1].trim());
+  return results;
+}
+
+function extractStrings(hoursXml: string): string[] {
+  return extractAll(hoursXml, "string");
+}
+
+function fmtTime(raw: string): string | undefined {
+  if (!raw || raw.length < 4) return undefined;
+  return raw.slice(0, 2) + ":" + raw.slice(2);
+}
+
+function parseHours(dayXml: string): DayHours {
+  const s = extractStrings(dayXml);
+  return {
+    open1: fmtTime(s[0] ?? ""),
+    close1: fmtTime(s[1] ?? ""),
+    open2: fmtTime(s[2] ?? ""),
+    close2: fmtTime(s[3] ?? ""),
+  };
+}
+
+/* ── Route handler ── */
 export async function POST(req: NextRequest) {
   try {
     const { postalCode, country = "FR" } = await req.json();
 
-    // 1. Geocode postal code → coordinates (Nominatim, free, no key)
-    const geocodeUrl = `https://nominatim.openstreetmap.org/search?postalcode=${encodeURIComponent(postalCode)}&country=${country === "FR" ? "France" : country}&format=json&limit=1`;
-    const geoRes = await fetch(geocodeUrl, {
-      headers: { "User-Agent": "LabelPaire/1.0 contact@labelpaire.fr" },
+    const soapBody = `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:web="http://www.mondialrelay.fr/webservice/">
+  <soap:Body>
+    <web:WSI4_PointRelais_Recherche>
+      <web:Enseigne>${MR_ENSEIGNE}</web:Enseigne>
+      <web:Pays>${country}</web:Pays>
+      <web:CP>${postalCode}</web:CP>
+      <web:NombreResultats>10</web:NombreResultats>
+      <web:Security></web:Security>
+    </web:WSI4_PointRelais_Recherche>
+  </soap:Body>
+</soap:Envelope>`;
+
+    const res = await fetch(SOAP_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "text/xml; charset=utf-8",
+        "SOAPAction": "http://www.mondialrelay.fr/webservice/WSI4_PointRelais_Recherche",
+      },
+      body: soapBody,
     });
-    const geoData = await geoRes.json();
-    if (!geoData || geoData.length === 0) {
+
+    const xml = await res.text();
+
+    // Check STAT code (0 = ok)
+    const stat = extractTag(xml, "STAT");
+    if (stat !== "0") {
+      console.error("MR API STAT:", stat);
       return NextResponse.json({ points: [] });
     }
-    const { lat, lon } = geoData[0];
 
-    // 2. Find Mondial Relay points nearby (Overpass API, free, no key)
-    const overpassQuery = `[out:json][timeout:20];
-(
-  node["brand"="Mondial Relay"](around:6000,${lat},${lon});
-  node["operator"="Mondial Relay"](around:6000,${lat},${lon});
-  node["name"~"Mondial Relay",i](around:6000,${lat},${lon});
-);
-out body;`;
+    // Parse each <PointRelais_Details>
+    const detailsBlocks = extractAll(xml, "PointRelais_Details");
+    const points: ParcelShop[] = detailsBlocks.map(block => {
+      const name = extractTag(block, "LgAdr1");
+      const addr = extractTag(block, "LgAdr3");
+      const city = extractTag(block, "Ville");
+      const cp = extractTag(block, "CP");
+      const num = extractTag(block, "Num");
+      const info = extractTag(block, "Information");
 
-    const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
-    const overpassRes = await fetch(overpassUrl, {
-      headers: { "Accept": "application/json" },
+      const latRaw = extractTag(block, "Latitude").replace(",", ".");
+      const lngRaw = extractTag(block, "Longitude").replace(",", ".");
+      const distRaw = extractTag(block, "Distance");
+
+      const hours: Record<string, DayHours> = {};
+      for (const day of DAYS) {
+        const dayXml = extractTag(block, `Horaires_${day}`);
+        if (dayXml) hours[day.toLowerCase()] = parseHours(dayXml);
+      }
+
+      return {
+        id: num,
+        name: titleCase(name),
+        address: titleCase(addr),
+        city: titleCase(city),
+        postalCode: cp,
+        lat: parseFloat(latRaw) || 0,
+        lng: parseFloat(lngRaw) || 0,
+        distance: parseInt(distRaw) || 0,
+        isLocker: info.toUpperCase().includes("LOCKER"),
+        hours,
+      };
     });
-
-    const overpassData = await overpassRes.json();
-    const elements: {
-      id: number; lat: number; lon: number;
-      tags?: { name?: string; addr_street?: string; "addr:street"?: string; "addr:housenumber"?: string; "addr:city"?: string; "addr:postcode"?: string; };
-    }[] = overpassData?.elements ?? [];
-
-    // Deduplicate by proximity and build result
-    const seen = new Set<string>();
-    const points: ParcelShop[] = [];
-
-    for (const el of elements) {
-      const key = `${el.lat.toFixed(4)},${el.lon.toFixed(4)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-
-      const tags = el.tags ?? {};
-      const street = tags["addr:street"] ?? tags["addr_street"] ?? "";
-      const houseNum = tags["addr:housenumber"] ?? "";
-      const city = tags["addr:city"] ?? "";
-      const pc = tags["addr:postcode"] ?? postalCode;
-      const name = tags["name"] ?? "Point Relais Mondial Relay";
-
-      points.push({
-        id: String(el.id),
-        name,
-        address: [street, houseNum].filter(Boolean).join(" "),
-        city,
-        postalCode: pc,
-        lat: el.lat,
-        lng: el.lon,
-      });
-
-      if (points.length >= 10) break;
-    }
 
     return NextResponse.json({ points });
   } catch (err) {
     console.error("MR parcelshops error:", err);
     return NextResponse.json({ points: [] });
   }
+}
+
+/* Turn "GNK MINI ALIMENTATION" → "Gnk Mini Alimentation" */
+function titleCase(s: string): string {
+  if (!s) return "";
+  return s
+    .toLowerCase()
+    .split(" ")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }

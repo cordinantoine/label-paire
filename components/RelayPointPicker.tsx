@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import dynamic from "next/dynamic";
-import type { ParcelShop } from "@/app/api/mr-parcelshops/route";
+import type { ParcelShop, DayHours } from "@/app/api/mr-parcelshops/route";
 
 export type RelayPoint = {
   id: string;
@@ -28,10 +28,40 @@ const TileLayer    = dynamic(() => import("react-leaflet").then(m => m.TileLayer
 const Marker       = dynamic(() => import("react-leaflet").then(m => m.Marker),       { ssr: false });
 const Popup        = dynamic(() => import("react-leaflet").then(m => m.Popup),        { ssr: false });
 
+const DAYS_FR = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"] as const;
+const DAYS_EN = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+const DAYS_FR_SHORT = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"] as const;
+
+/* ── Hour formatting ── */
+function formatSlot(h: DayHours | undefined): string {
+  if (!h || !h.open1) return "Fermé";
+  let s = `${h.open1}–${h.close1}`;
+  if (h.open2) s += ` / ${h.open2}–${h.close2}`;
+  return s;
+}
+
+function isOpenNow(hours: ParcelShop["hours"]): boolean {
+  const now = new Date();
+  const dayIdx = (now.getDay() + 6) % 7; // Mon=0
+  const dayKey = DAYS_FR[dayIdx];
+  const h = hours[dayKey];
+  if (!h?.open1) return false;
+
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const toMin = (t: string) => { const [hh, mm] = t.split(":").map(Number); return hh * 60 + mm; };
+
+  if (mins >= toMin(h.open1) && mins <= toMin(h.close1!)) return true;
+  if (h.open2 && mins >= toMin(h.open2) && mins <= toMin(h.close2!)) return true;
+  return false;
+}
+
 export default function RelayPointPicker({ postalCode, country, onSelect, selectedPoint, t }: Props) {
-  const [points, setPoints]   = useState<ParcelShop[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [points, setPoints]       = useState<ParcelShop[]>([]);
+  const [loading, setLoading]     = useState(true);
   const [leafletReady, setLeafletReady] = useState(false);
+  const [expandedId, setExpandedId]     = useState<string | null>(null);
+
+  const isFr = (v: { fr: string; en: string }) => t(v) === v.fr;
 
   // Load Leaflet CSS + fix default icon paths
   useEffect(() => {
@@ -54,7 +84,7 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
     });
   }, []);
 
-  // Fetch relay points when postal code changes
+  // Fetch relay points
   useEffect(() => {
     if (!postalCode) return;
     setLoading(true);
@@ -93,7 +123,7 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
   if (!points.length) {
     return (
       <p className="text-center py-4 text-gray-500 text-xs">
-        {t({ fr: "Aucun point Mondial Relay trouvé pour ce code postal. Choisissez Colissimo.", en: "No Mondial Relay point found. Please choose Colissimo." })}
+        {t({ fr: "Aucun point Mondial Relay trouvé pour ce code postal.", en: "No Mondial Relay point found for this postal code." })}
       </p>
     );
   }
@@ -101,13 +131,12 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
   return (
     <div className="flex flex-col gap-3 mt-1">
       <p className="text-xs text-gray-400 font-medium">
-        📍 {t({ fr: `${points.length} points relais proches`, en: `${points.length} nearby relay points` })}
+        {t({ fr: `${points.length} points relais proches`, en: `${points.length} nearby relay points` })}
       </p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-
-        {/* Map */}
-        <div className="rounded-xl overflow-hidden border border-white/10 h-[260px] bg-[#1a1a1a]">
+        {/* ── Map ── */}
+        <div className="rounded-xl overflow-hidden border border-white/10 h-[280px] bg-[#1a1a1a]">
           {leafletReady ? (
             <MapContainer
               center={[center.lat, center.lng]}
@@ -119,16 +148,19 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
                 attribution='&copy; <a href="https://osm.org">OSM</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              {points.filter(p => p.lat && p.lng).map(sp => (
+              {points.filter(p => p.lat && p.lng).map((sp) => (
                 <Marker
                   key={sp.id}
                   position={[sp.lat!, sp.lng!]}
                   eventHandlers={{ click: () => onSelect(sp) }}
                 >
                   <Popup>
-                    <div className="text-xs font-medium">{sp.name}</div>
-                    {sp.address && <div className="text-xs text-gray-500">{sp.address}</div>}
-                    <div className="text-xs text-gray-500">{sp.postalCode} {sp.city}</div>
+                    <div className="text-xs">
+                      <p className="font-bold">{sp.name}</p>
+                      <p className="text-gray-600">{sp.address}</p>
+                      <p className="text-gray-600">{sp.postalCode} {sp.city}</p>
+                      {sp.isLocker && <p className="text-blue-600 font-medium mt-1">Locker 24/7</p>}
+                    </div>
                   </Popup>
                 </Marker>
               ))}
@@ -140,50 +172,121 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
           )}
         </div>
 
-        {/* List */}
-        <div className="flex flex-col gap-1.5 max-h-[260px] overflow-y-auto pr-0.5">
+        {/* ── List ── */}
+        <div className="flex flex-col gap-1.5 max-h-[280px] overflow-y-auto pr-0.5 custom-scrollbar">
           {points.map((sp, i) => {
             const isSel = selectedPoint?.id === sp.id;
+            const isExpanded = expandedId === sp.id;
+            const open = isOpenNow(sp.hours);
+
             return (
-              <button
-                key={sp.id}
-                onClick={() => onSelect(sp)}
-                className={`w-full text-left rounded-lg px-3 py-2.5 border transition-all ${
-                  isSel
-                    ? "border-[#ff9ed5] bg-[#ff9ed5]/10"
-                    : "border-white/[0.06] hover:border-white/20 bg-transparent"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
-                    isSel ? "bg-[#ff9ed5] text-black" : "bg-white/10 text-gray-400"
-                  }`}>
-                    {isSel ? "✓" : i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold truncate ${isSel ? "text-[#ff9ed5]" : "text-white"}`}>
-                      {sp.name}
-                    </p>
-                    {sp.address && (
+              <div key={sp.id} className="flex flex-col">
+                <button
+                  onClick={() => {
+                    onSelect(sp);
+                    setExpandedId(isExpanded ? null : sp.id);
+                  }}
+                  className={`w-full text-left rounded-lg px-3 py-2.5 border transition-all ${
+                    isSel
+                      ? "border-[#ff9ed5] bg-[#ff9ed5]/10"
+                      : "border-white/[0.06] hover:border-white/20 bg-transparent"
+                  } ${isExpanded && !isSel ? "rounded-b-none" : ""}`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
+                      isSel ? "bg-[#ff9ed5] text-black" : "bg-white/10 text-gray-400"
+                    }`}>
+                      {isSel ? "✓" : i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className={`text-xs font-semibold truncate ${isSel ? "text-[#ff9ed5]" : "text-white"}`}>
+                          {sp.name}
+                        </p>
+                        {sp.isLocker && (
+                          <span className="flex-shrink-0 text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium">
+                            LOCKER
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-gray-500 truncate">{sp.address}</p>
-                    )}
-                    <p className="text-[11px] text-gray-600">{sp.postalCode} {sp.city}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[11px] text-gray-600">{sp.postalCode} {sp.city}</p>
+                        <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                          open ? "bg-green-500/15 text-green-400" : "bg-red-500/15 text-red-400"
+                        }`}>
+                          {open
+                            ? t({ fr: "Ouvert", en: "Open" })
+                            : t({ fr: "Fermé", en: "Closed" })}
+                        </span>
+                      </div>
+                      {sp.distance > 0 && (
+                        <p className="text-[10px] text-gray-600 mt-0.5">
+                          {sp.distance >= 1000
+                            ? `${(sp.distance / 1000).toFixed(1)} km`
+                            : `${sp.distance} m`}
+                        </p>
+                      )}
+                    </div>
+                    {/* Expand chevron */}
+                    <svg
+                      className={`w-3.5 h-3.5 text-gray-500 mt-1 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                      fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
-                </div>
-              </button>
+                </button>
+
+                {/* ── Opening hours (expanded) ── */}
+                {isExpanded && (
+                  <div className={`border border-t-0 rounded-b-lg px-3 py-2 ${
+                    isSel ? "border-[#ff9ed5] bg-[#ff9ed5]/5" : "border-white/[0.06] bg-white/[0.02]"
+                  }`}>
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase tracking-wider mb-1.5">
+                      {t({ fr: "Horaires d'ouverture", en: "Opening hours" })}
+                    </p>
+                    <div className="grid grid-cols-1 gap-0.5">
+                      {DAYS_FR.map((day, di) => {
+                        const h = sp.hours[day];
+                        const today = (new Date().getDay() + 6) % 7 === di;
+                        const slot = formatSlot(h);
+                        const closed = slot === "Fermé";
+                        return (
+                          <div key={day} className={`flex justify-between text-[10px] py-0.5 px-1 rounded ${
+                            today ? "bg-white/[0.04]" : ""
+                          }`}>
+                            <span className={`${today ? "text-white font-semibold" : "text-gray-500"}`}>
+                              {isFr({ fr: "", en: "" })
+                                ? DAYS_FR_SHORT[di]
+                                : DAYS_EN[di]}
+                              {today && " •"}
+                            </span>
+                            <span className={closed ? "text-red-400/70" : today ? "text-white" : "text-gray-400"}>
+                              {closed ? t({ fr: "Fermé", en: "Closed" }) : slot}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
       </div>
 
-      {/* Confirmation */}
+      {/* ── Confirmation banner ── */}
       {selectedPoint && (
         <div className="flex items-start gap-2 bg-green-500/10 border border-green-500/25 rounded-lg px-3 py-2.5">
           <span className="text-green-400 text-sm mt-0.5">✓</span>
           <div>
             <p className="text-green-400 text-xs font-semibold">{selectedPoint.name}</p>
             <p className="text-green-400/70 text-xs">
-              {selectedPoint.address}{selectedPoint.address ? ", " : ""}{selectedPoint.postalCode} {selectedPoint.city}
+              {(selectedPoint as ParcelShop).address}
+              {(selectedPoint as ParcelShop).address ? ", " : ""}
+              {selectedPoint.postalCode} {selectedPoint.city}
             </p>
           </div>
         </div>
