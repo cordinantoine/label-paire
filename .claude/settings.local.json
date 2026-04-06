@@ -42,7 +42,8 @@
       "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"irm https://astral.sh/uv/install.ps1 | iex\")",
       "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
       "Bash(claude mcp:*)",
-      "Bash(curl -L \"https://raw.githubusercontent.com/ahujasid/blender-mcp/main/addon.py\" -o \"$HOME/Desktop/blender_mcp_addon.py\")"
+      "Bash(curl -L \"https://raw.githubusercontent.com/ahujasid/blender-mcp/main/addon.py\" -o \"$HOME/Desktop/blender_mcp_addon.py\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/)"
     ]
   }
 }
