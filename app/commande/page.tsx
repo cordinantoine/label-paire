@@ -6,8 +6,8 @@ import { getProductBySlug } from "@/lib/products";
 import { useT } from "@/hooks/useT";
 import { tr } from "@/lib/i18n";
 import type { ShippingRate } from "@/app/api/shipping-rates/route";
-import type { ServicePoint } from "@/app/api/service-points/route";
 import dynamic from "next/dynamic";
+import type { RelayPoint } from "@/components/RelayPointPicker";
 
 const RelayPointPicker = dynamic(() => import("@/components/RelayPointPicker"), { ssr: false });
 
@@ -66,7 +66,7 @@ export default function Commande() {
   const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
 
   // Relay point state
-  const [selectedServicePoint, setSelectedServicePoint] = useState<ServicePoint | null>(null);
+  const [selectedServicePoint, setSelectedServicePoint] = useState<RelayPoint | null>(null);
 
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
@@ -158,7 +158,7 @@ export default function Commande() {
           shippingCost,
           servicePointId:   selectedServicePoint?.id ?? null,
           servicePointName: selectedServicePoint
-            ? `${selectedServicePoint.name} — ${selectedServicePoint.street} ${selectedServicePoint.house_number}, ${selectedServicePoint.city}`
+            ? `${selectedServicePoint.name} — ${selectedServicePoint.address}, ${selectedServicePoint.postalCode} ${selectedServicePoint.city}`
             : null,
         }),
       });
@@ -328,15 +328,14 @@ export default function Commande() {
                         </div>
                       </button>
 
-                      {/* ── Relay point picker with map ── */}
+                      {/* ── Widget officiel Mondial Relay ── */}
                       {selectedRate?.id === rate.id && isRelayCarrier(rate) && (
-                        <div className="bg-[#0d0d0d] border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3">
+                        <div className="border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3 bg-[#0d0d0d]">
                           <RelayPointPicker
                             postalCode={form.cp}
                             country={form.pays}
-                            carrier={rate.carrier}
-                            selectedPoint={selectedServicePoint}
                             onSelect={setSelectedServicePoint}
+                            selectedPoint={selectedServicePoint}
                             t={t}
                           />
                         </div>
@@ -404,7 +403,7 @@ export default function Commande() {
                     <div className="mt-2 pt-2 border-t border-white/[0.06]">
                       <p className="text-xs text-gray-500">{t({ fr: "Point relais", en: "Relay point" })}</p>
                       <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedServicePoint.name}</p>
-                      <p className="text-xs text-gray-500">{selectedServicePoint.street} {selectedServicePoint.house_number}, {selectedServicePoint.postal_code} {selectedServicePoint.city}</p>
+                      <p className="text-xs text-gray-500">{selectedServicePoint.address}, {selectedServicePoint.postalCode} {selectedServicePoint.city}</p>
                     </div>
                   )}
                 </div>

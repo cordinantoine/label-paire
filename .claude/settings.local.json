@@ -34,7 +34,15 @@
       "WebFetch(domain:developers.boxtal.com)",
       "WebSearch",
       "WebFetch(domain:developer.boxtal.com)",
-      "Bash(npx next:*)"
+      "Bash(npx next:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(uv --version)",
+      "Bash(uvx --version)",
+      "Bash(powershell.exe -Command \"irm https://astral.sh/uv/install.ps1 | iex\")",
+      "Bash(powershell.exe -ExecutionPolicy Bypass -Command \"irm https://astral.sh/uv/install.ps1 | iex\")",
+      "Bash(export PATH=\"$HOME/.local/bin:$PATH\")",
+      "Bash(claude mcp:*)",
+      "Bash(curl -L \"https://raw.githubusercontent.com/ahujasid/blender-mcp/main/addon.py\" -o \"$HOME/Desktop/blender_mcp_addon.py\")"
     ]
   }
 }

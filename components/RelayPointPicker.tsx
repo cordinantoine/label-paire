@@ -1,210 +1,148 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import type { ServicePoint } from "@/app/api/service-points/route";
+import { useEffect, useRef, useState } from "react";
 
-// Dynamically import react-leaflet (client-only)
-import dynamic from "next/dynamic";
-
-const MapContainer = dynamic(
-  () => import("react-leaflet").then((m) => m.MapContainer),
-  { ssr: false }
-);
-const TileLayer = dynamic(
-  () => import("react-leaflet").then((m) => m.TileLayer),
-  { ssr: false }
-);
-const Marker = dynamic(
-  () => import("react-leaflet").then((m) => m.Marker),
-  { ssr: false }
-);
-const Popup = dynamic(
-  () => import("react-leaflet").then((m) => m.Popup),
-  { ssr: false }
-);
+export type RelayPoint = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  postalCode: string;
+};
 
 type Props = {
   postalCode: string;
   country: string;
-  carrier: string;
-  selectedPoint: ServicePoint | null;
-  onSelect: (point: ServicePoint) => void;
+  onSelect: (point: RelayPoint) => void;
+  selectedPoint: RelayPoint | null;
   t: (v: { fr: string; en: string }) => string;
 };
 
-export default function RelayPointPicker({ postalCode, country, carrier, selectedPoint, onSelect, t }: Props) {
-  const [points, setPoints] = useState<ServicePoint[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [leafletReady, setLeafletReady] = useState(false);
-  const [hoveredId, setHoveredId] = useState<number | null>(null);
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    $: any;
+    jQuery: any;
+  }
+}
 
-  // Load leaflet CSS + fix default icon
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+const MR_BRAND = "CC22X0UA";
 
-    // Load Leaflet CSS
-    if (!document.querySelector('link[href*="leaflet"]')) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(link);
+function loadScript(src: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) {
+      resolve();
+      return;
     }
+    const s = document.createElement("script");
+    s.src = src;
+    s.onload = () => resolve();
+    s.onerror = () => reject();
+    document.body.appendChild(s);
+  });
+}
 
-    // Fix Leaflet default icon paths
-    import("leaflet").then((L) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-      setLeafletReady(true);
+function loadCSS(href: string) {
+  if (document.querySelector(`link[href="${href}"]`)) return;
+  const l = document.createElement("link");
+  l.rel = "stylesheet";
+  l.href = href;
+  document.head.appendChild(l);
+}
+
+export default function RelayPointPicker({ postalCode, country, onSelect, selectedPoint, t }: Props) {
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const initialized = useRef(false);
+  const currentPostal = useRef(postalCode);
+
+  const initWidget = (postal: string) => {
+    if (!window.$ || !document.getElementById("Zone_Widget")) return;
+    window.$("#Zone_Widget").empty();
+
+    window.$("#Zone_Widget").MRWWidget({
+      Target: "#MR_SelectedPoint",
+      Brand: MR_BRAND,
+      Country: country || "FR",
+      PostCode: postal,
+      OnParcelShopSelected: (data: any) => {
+        onSelect({
+          id: data.ID,
+          name: data.Nom,
+          address: [data.Adresse1, data.Adresse2].filter(Boolean).join(" "),
+          city: data.Ville,
+          postalCode: data.CP,
+        });
+      },
     });
+  };
+
+  // Load scripts once
+  useEffect(() => {
+    loadCSS("https://widget.mondialrelay.com/parcelshop-picker/v4_1/css/widget-v4_1.css");
+
+    loadScript("https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js")
+      .then(() => loadScript("https://widget.mondialrelay.com/parcelshop-picker/v4_1/widget-v4_1.min.js"))
+      .then(() => {
+        setStatus("ready");
+      })
+      .catch(() => setStatus("error"));
   }, []);
 
-  // Fetch service points
+  // Init widget once scripts are ready
   useEffect(() => {
-    if (!postalCode) return;
-    setLoading(true);
-    fetch("/api/service-points", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postalCode, country, carrier }),
-    })
-      .then((r) => r.json())
-      .then((data) => setPoints(data.points ?? []))
-      .catch(() => setPoints([]))
-      .finally(() => setLoading(false));
-  }, [postalCode, country, carrier]);
+    if (status !== "ready" || initialized.current) return;
+    initialized.current = true;
+    currentPostal.current = postalCode;
+    setTimeout(() => initWidget(postalCode), 50);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status]);
 
-  // Map center
-  const center = useMemo(() => {
-    if (points.length > 0) {
-      return {
-        lat: points.reduce((s, p) => s + p.latitude, 0) / points.length,
-        lng: points.reduce((s, p) => s + p.longitude, 0) / points.length,
-      };
-    }
-    // Default center (France)
-    return { lat: 48.85, lng: 2.35 };
-  }, [points]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8 text-gray-500 text-sm">
-        <svg className="animate-spin h-4 w-4 mr-2 text-[#ff9ed5]" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-        </svg>
-        {t({ fr: "Recherche des points relais...", en: "Searching relay points..." })}
-      </div>
-    );
-  }
-
-  if (points.length === 0) {
-    return (
-      <div className="text-center py-6 text-gray-500 text-sm">
-        {t({ fr: "Aucun point relais trouvé pour ce code postal. Essayez un autre mode de livraison.", en: "No relay points found for this postal code. Try another shipping method." })}
-      </div>
-    );
-  }
+  // Reinit when postal code changes
+  useEffect(() => {
+    if (status !== "ready" || !initialized.current) return;
+    if (postalCode === currentPostal.current) return;
+    currentPostal.current = postalCode;
+    initWidget(postalCode);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postalCode, status]);
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-xs text-gray-400 font-medium">
-        📍 {t({ fr: `${points.length} points relais trouvés près de ${postalCode}`, en: `${points.length} relay points found near ${postalCode}` })}
-      </p>
+      <input type="hidden" id="MR_SelectedPoint" />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {/* Map */}
-        <div className="rounded-xl overflow-hidden border border-white/10 h-[280px] md:h-[320px] relative bg-[#1a1a1a]">
-          {leafletReady && (
-            <MapContainer
-              center={[center.lat, center.lng]}
-              zoom={13}
-              style={{ height: "100%", width: "100%" }}
-              scrollWheelZoom={false}
-            >
-              <TileLayer
-                attribution='&copy; <a href="https://osm.org">OSM</a>'
-                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              />
-              {points.map((sp) => (
-                <Marker
-                  key={sp.id}
-                  position={[sp.latitude, sp.longitude]}
-                  eventHandlers={{
-                    click: () => onSelect(sp),
-                  }}
-                >
-                  <Popup>
-                    <div className="text-xs">
-                      <strong>{sp.name}</strong><br />
-                      {sp.street} {sp.house_number}<br />
-                      {sp.postal_code} {sp.city}
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
-            </MapContainer>
-          )}
-          {!leafletReady && (
-            <div className="flex items-center justify-center h-full text-gray-600 text-xs">
-              {t({ fr: "Chargement de la carte...", en: "Loading map..." })}
-            </div>
-          )}
+      {/* Loading state */}
+      {status === "loading" && (
+        <div className="flex items-center justify-center py-10 text-gray-500 text-sm gap-2">
+          <svg className="animate-spin h-4 w-4 text-[#ff9ed5]" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          {t({ fr: "Chargement du sélecteur de points relais...", en: "Loading relay point picker..." })}
         </div>
+      )}
 
-        {/* List */}
-        <div className="flex flex-col gap-1.5 max-h-[320px] overflow-y-auto pr-1 custom-scrollbar">
-          {points.map((sp, i) => {
-            const isSelected = selectedPoint?.id === sp.id;
-            const isHovered = hoveredId === sp.id;
-            return (
-              <button
-                key={sp.id}
-                onClick={() => onSelect(sp)}
-                onMouseEnter={() => setHoveredId(sp.id)}
-                onMouseLeave={() => setHoveredId(null)}
-                className={`w-full text-left rounded-lg px-3 py-2.5 border transition-all ${
-                  isSelected
-                    ? "border-[#ff9ed5] bg-[#ff9ed5]/10"
-                    : isHovered
-                      ? "border-white/20 bg-white/[0.03]"
-                      : "border-white/[0.06] bg-transparent"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold mt-0.5 ${
-                    isSelected ? "bg-[#ff9ed5] text-black" : "bg-white/10 text-gray-400"
-                  }`}>
-                    {isSelected ? "✓" : i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className={`text-xs font-semibold truncate ${isSelected ? "text-[#ff9ed5]" : "text-white"}`}>
-                      {sp.name}
-                    </p>
-                    <p className="text-[11px] text-gray-500 truncate">
-                      {sp.street} {sp.house_number}
-                    </p>
-                    <p className="text-[11px] text-gray-600">
-                      {sp.postal_code} {sp.city}
-                    </p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+      {/* Error state */}
+      {status === "error" && (
+        <div className="text-red-400 text-xs py-4 text-center">
+          {t({ fr: "Impossible de charger le widget. Choisissez un autre mode de livraison.", en: "Unable to load widget. Please choose another shipping method." })}
         </div>
-      </div>
+      )}
 
+      {/* Widget container — always in DOM so MRWWidget can mount */}
+      <div
+        id="Zone_Widget"
+        className="rounded-xl overflow-hidden bg-white"
+        style={{ minHeight: status === "ready" ? 420 : 0 }}
+      />
+
+      {/* Selected relay point confirmation */}
       {selectedPoint && (
-        <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-          <span className="text-green-400 text-xs">✓</span>
-          <span className="text-green-400 text-xs font-medium">
-            {t({ fr: "Point relais sélectionné :", en: "Selected relay point:" })} {selectedPoint.name}
-          </span>
+        <div className="flex items-start gap-2 bg-green-500/10 border border-green-500/25 rounded-lg px-3 py-2.5">
+          <span className="text-green-400 text-sm mt-0.5">✓</span>
+          <div>
+            <p className="text-green-400 text-xs font-semibold">{selectedPoint.name}</p>
+            <p className="text-green-400/70 text-xs">{selectedPoint.address}, {selectedPoint.postalCode} {selectedPoint.city}</p>
+          </div>
         </div>
       )}
     </div>
