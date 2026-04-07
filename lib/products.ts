@@ -116,6 +116,7 @@ export const products: Product[] = [
     description:
       "Patchs adhésifs pour réparer et protéger le talon intérieur de vos chaussures. Prévient l'usure et prolonge la durée de vie de vos paires préférées.",
     badge: null,
+    image: "/products/patchs.png",
   },
 ];
 
