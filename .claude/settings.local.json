@@ -64,7 +64,8 @@
       "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/Service/BoxtalRelaisService.php\")",
       "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/BoxtalShipping.php\")",
       "Bash(printf \"31YP6RQW7LOQQFT03Z2CZU8NJMRNG9CH5FC5IY1J\")",
-      "Bash(printf \"8c6d864c-0906-41fe-82cb-eefb83a13f73\")"
+      "Bash(printf \"8c6d864c-0906-41fe-82cb-eefb83a13f73\")",
+      "Bash(curl -s -X POST \"https://label-paire.vercel.app/api/boxtal-parcelshops\" -H \"Content-Type: application/json\" -d '{\"postalCode\":\"75001\",\"city\":\"Paris\",\"address\":\"12 rue de la Paix\",\"networks\":\"MONR,CHRP\"}')"
     ]
   }
 }

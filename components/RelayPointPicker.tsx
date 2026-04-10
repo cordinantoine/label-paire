@@ -84,14 +84,14 @@ export default function RelayPointPicker({ postalCode, country, onSelect, select
     });
   }, []);
 
-  // Fetch relay points
+  // Fetch Mondial Relay points via Boxtal API
   useEffect(() => {
     if (!postalCode) return;
     setLoading(true);
-    fetch("/api/mr-parcelshops", {
+    fetch("/api/boxtal-parcelshops", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postalCode, country }),
+      body: JSON.stringify({ postalCode, city: "", address: "", networks: "MONR" }),
     })
       .then(r => r.json())
       .then(d => setPoints(d.points ?? []))

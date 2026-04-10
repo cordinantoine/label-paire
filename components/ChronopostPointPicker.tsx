@@ -77,14 +77,14 @@ export default function ChronopostPointPicker({ postalCode, city, address, onSel
     });
   }, []);
 
-  // Fetch Chronopost relay points
+  // Fetch Chronopost Shop2Shop relay points via Boxtal API
   useEffect(() => {
     if (!postalCode) return;
     setLoading(true);
-    fetch("/api/chronopost-parcelshops", {
+    fetch("/api/boxtal-parcelshops", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ postalCode, city, address }),
+      body: JSON.stringify({ postalCode, city, address, networks: "CHRP" }),
     })
       .then(r => r.json())
       .then(d => setPoints(d.points ?? []))
