@@ -8,8 +8,10 @@ import { tr } from "@/lib/i18n";
 import type { ShippingRate } from "@/app/api/shipping-rates/route";
 import dynamic from "next/dynamic";
 import type { RelayPoint } from "@/components/RelayPointPicker";
+import type { ChronoParcelShop } from "@/components/ChronopostPointPicker";
 
-const RelayPointPicker = dynamic(() => import("@/components/RelayPointPicker"), { ssr: false });
+const RelayPointPicker      = dynamic(() => import("@/components/RelayPointPicker"),      { ssr: false });
+const ChronopostPointPicker = dynamic(() => import("@/components/ChronopostPointPicker"), { ssr: false });
 
 const COUNTRIES = [
   { code: "FR", label: "France" },
@@ -28,11 +30,20 @@ const COUNTRIES = [
 
 const EU_COUNTRIES = ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"];
 
-const RELAY_CARRIERS = ["mondial_relay"];
+const RELAY_CARRIERS = ["mondial_relay", "chronopost_relay"];
 
 function isRelayCarrier(rate: ShippingRate | null) {
   if (!rate) return false;
-  return RELAY_CARRIERS.includes(rate.carrier) || rate.name.toLowerCase().includes("relais") || rate.name.toLowerCase().includes("relay");
+  return (
+    RELAY_CARRIERS.includes(rate.carrier) ||
+    rate.name.toLowerCase().includes("relais") ||
+    rate.name.toLowerCase().includes("relay") ||
+    rate.name.toLowerCase().includes("shop2shop")
+  );
+}
+
+function isChronopostRelay(rate: ShippingRate | null) {
+  return rate?.carrier === "chronopost_relay";
 }
 
 // Fallback rates when Sendcloud has no carrier contracts configured
@@ -40,8 +51,8 @@ function getFallbackRates(country: string): ShippingRate[] {
   if (country === "FR") {
     return [
       { id: -2, name: "Mondial Relay - Point Relais", carrier: "mondial_relay", price: 3.90, min_days: 3, max_days: 5 },
-      { id: -1, name: "Colissimo Domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
-      { id: -3, name: "Colissimo Signature", carrier: "colissimo", price: 6.90, min_days: 2, max_days: 3 },
+      { id: -1, name: "Livraison à domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
+      { id: -3, name: "Chronopost Shop2Shop - Point Relais", carrier: "chronopost_relay", price: 6.90, min_days: 1, max_days: 2 },
     ];
   }
   if (EU_COUNTRIES.includes(country) || country === "GB") {
@@ -328,16 +339,27 @@ export default function Commande() {
                         </div>
                       </button>
 
-                      {/* ── Widget officiel Mondial Relay ── */}
+                      {/* ── Sélecteur de point relais ── */}
                       {selectedRate?.id === rate.id && isRelayCarrier(rate) && (
                         <div className="border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3 bg-[#0d0d0d]">
-                          <RelayPointPicker
-                            postalCode={form.cp}
-                            country={form.pays}
-                            onSelect={setSelectedServicePoint}
-                            selectedPoint={selectedServicePoint}
-                            t={t}
-                          />
+                          {isChronopostRelay(rate) ? (
+                            <ChronopostPointPicker
+                              postalCode={form.cp}
+                              city={form.ville}
+                              address={form.adresse}
+                              onSelect={(p: ChronoParcelShop) => setSelectedServicePoint(p)}
+                              selectedPoint={selectedServicePoint as ChronoParcelShop | null}
+                              t={t}
+                            />
+                          ) : (
+                            <RelayPointPicker
+                              postalCode={form.cp}
+                              country={form.pays}
+                              onSelect={setSelectedServicePoint}
+                              selectedPoint={selectedServicePoint}
+                              t={t}
+                            />
+                          )}
                         </div>
                       )}
                     </div>
