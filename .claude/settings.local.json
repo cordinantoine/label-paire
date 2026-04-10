@@ -54,7 +54,17 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:api.github.com)",
       "WebFetch(domain:jaffexpress.waaillab.com)",
-      "WebFetch(domain:help.boxtal.com)"
+      "WebFetch(domain:help.boxtal.com)",
+      "Bash(curl -s -X POST https://label-paire.vercel.app/api/chronopost-parcelshops -H 'Content-Type: application/json' -d '{\"postalCode\":\"75001\",\"city\":\"Paris\",\"address\":\"12 rue de la Paix\"}')",
+      "Bash(node -e ':*)",
+      "Bash(node --env-file=.env.local -e ':*)",
+      "WebFetch(domain:dawap.fr)",
+      "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/Service/BoxtalApiTokenService.php\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/Service/BoxtalPricingService.php\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/Service/BoxtalRelaisService.php\")",
+      "Bash(curl -s \"https://raw.githubusercontent.com/vz777/BoxtalShipping/main/BoxtalShipping.php\")",
+      "Bash(printf \"31YP6RQW7LOQQFT03Z2CZU8NJMRNG9CH5FC5IY1J\")",
+      "Bash(printf \"8c6d864c-0906-41fe-82cb-eefb83a13f73\")"
     ]
   }
 }
