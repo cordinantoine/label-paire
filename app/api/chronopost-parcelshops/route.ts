@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
       localite: extractTag(block, "localite"),
     }));
 
-    const uniqueCPs = [...new Set(rawBlocks.map((b) => b.cp))];
+    const uniqueCPs = Array.from(new Set(rawBlocks.map((b) => b.cp)));
     const geoCache: Record<string, { lat: number; lng: number }> = {};
 
     for (const cp of uniqueCPs) {
