@@ -49,7 +49,9 @@ export async function POST(req: NextRequest) {
       }) => {
         const minW = parseFloat(m.min_weight) * 1000; // to grams
         const maxW = parseFloat(m.max_weight) * 1000;
-        return weightG >= minW && weightG <= maxW;
+        const price = parseFloat(String(m.price));
+        // Ignore methods with no real price — account not contracted
+        return weightG >= minW && weightG <= maxW && price > 0;
       })
       .map((m: {
         id: number;

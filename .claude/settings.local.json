@@ -49,7 +49,11 @@
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://www.mondialrelay.fr/sfd/\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePays=FR&CP=78400\")",
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://widget.mondialrelay.com/parcelshop-picker/v4_1/widget-v4_1.min.js\")",
-      "Bash(curl -s \"https://nominatim.openstreetmap.org/search?postalcode=78400&country=France&format=json&limit=1\" -H \"User-Agent: LabelPaire/1.0\")"
+      "Bash(curl -s \"https://nominatim.openstreetmap.org/search?postalcode=78400&country=France&format=json&limit=1\" -H \"User-Agent: LabelPaire/1.0\")",
+      "Bash(npx vercel:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebFetch(domain:jaffexpress.waaillab.com)"
     ]
   }
 }
