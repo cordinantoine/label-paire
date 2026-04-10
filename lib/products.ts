@@ -37,6 +37,7 @@ export const products: Product[] = [
     description:
       "Le kit idéal pour débuter. Contient La Belle Mousse et une brosse. La mousse ne nécessite pas d'ajout d'eau — pratique et efficace pour un nettoyage rapide.",
     badge: null,
+    image: "/products/kit-nettoyage.png",
   },
   {
     slug: "la-belle-mousse",
