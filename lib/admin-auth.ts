@@ -1,7 +1,12 @@
 // JWT HS256 via Web Crypto API — Edge-compatible, no npm deps
 
-function base64UrlEncode(data: ArrayBuffer): string {
-  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))))
+function base64UrlEncode(data: Uint8Array | ArrayBuffer): string {
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary)
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
@@ -11,7 +16,11 @@ function base64UrlDecode(str: string): Uint8Array {
   const base64 = str.replace(/-/g, "+").replace(/_/g, "/");
   const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
   const binary = atob(padded);
-  return new Uint8Array([...binary].map((c) => c.charCodeAt(0)));
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
 }
 
 async function getKey(secret: string): Promise<CryptoKey> {
@@ -71,9 +80,8 @@ export async function verifyJwt(
     );
     if (!valid) return null;
 
-    const payload = JSON.parse(
-      new TextDecoder().decode(base64UrlDecode(payloadB64))
-    );
+    const payloadBytes = base64UrlDecode(payloadB64);
+    const payload = JSON.parse(new TextDecoder().decode(payloadBytes));
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp < now) return null;
     if (!payload.admin) return null;
