@@ -1,7 +1,7 @@
 // JWT HS256 via Web Crypto API — Edge-compatible, no npm deps
 
 function base64UrlEncode(data: ArrayBuffer): string {
-  return btoa(String.fromCharCode(...new Uint8Array(data)))
+  return btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(data))))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
