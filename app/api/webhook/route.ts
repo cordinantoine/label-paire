@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
-import { createSendcloudParcel } from "@/lib/sendcloud";
+import { Resend } from "resend";
+import { createBoxtalOrder } from "@/lib/boxtalOrder";
 import { prisma } from "@/lib/prisma";
 import { getProductBySlug } from "@/lib/products";
+import { orderConfirmationHtml, orderConfirmationText } from "@/lib/emails/orderConfirmation";
 
 // Disable body parsing — Stripe needs the raw body for signature verification
 export const dynamic = "force-dynamic";
@@ -121,6 +123,38 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     console.log(`✅ DB — Commande ${session.id} sauvegardée`);
   } catch (err) {
     console.error("❌ DB — Erreur sauvegarde commande:", err);
+  }
+
+  // ── Email de confirmation commande ────────────────────────────────────────
+
+  if (meta.email) {
+    try {
+      const resend = new Resend(process.env.RESEND_API_KEY);
+      await resend.emails.send({
+        from: "Label Paire <commandes@labelpaire.fr>",
+        to:   meta.email,
+        subject: "Ta commande Label Paire est confirmée ✓",
+        html: orderConfirmationHtml({
+          nom:            meta.nom ?? "Client",
+          email:          meta.email,
+          items:          enrichedItems,
+          shippingMethod: meta.shipping_method ?? "",
+          amountTotal:    session.amount_total ?? 0,
+          orderId:        session.id,
+        }),
+        text: orderConfirmationText({
+          nom:            meta.nom ?? "Client",
+          email:          meta.email,
+          items:          enrichedItems,
+          shippingMethod: meta.shipping_method ?? "",
+          amountTotal:    session.amount_total ?? 0,
+          orderId:        session.id,
+        }),
+      });
+      console.log(`✅ Email confirmation envoyé à ${meta.email}`);
+    } catch (err) {
+      console.error("❌ Erreur envoi email confirmation:", err);
+    }
   }
 
   // ── Création du colis Sendcloud / Boxtal ───────────────────────────────────

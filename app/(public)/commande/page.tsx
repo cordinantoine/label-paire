@@ -5,13 +5,10 @@ import { useCartStore } from "@/lib/cartStore";
 import { getProductBySlug } from "@/lib/products";
 import { useT } from "@/hooks/useT";
 import { tr } from "@/lib/i18n";
-import type { ShippingRate } from "@/app/api/shipping-rates/route";
 import dynamic from "next/dynamic";
-import type { RelayPoint } from "@/components/RelayPointPicker";
-import type { ChronoParcelShop } from "@/components/ChronopostPointPicker";
+import type { BoxtalParcelShop } from "@/components/BoxtalRelayPicker";
 
-const RelayPointPicker      = dynamic(() => import("@/components/RelayPointPicker"),      { ssr: false });
-const ChronopostPointPicker = dynamic(() => import("@/components/ChronopostPointPicker"), { ssr: false });
+const BoxtalRelayPicker = dynamic(() => import("@/components/BoxtalRelayPicker"), { ssr: false });
 
 const COUNTRIES = [
   { code: "FR", label: "France" },
@@ -28,56 +25,29 @@ const COUNTRIES = [
   { code: "CA", label: "Canada" },
 ];
 
-const EU_COUNTRIES = ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"];
+// Relay only available for France
+const RELAY_COUNTRIES = ["FR"];
 
-const RELAY_CARRIERS = ["mondial_relay", "chronopost_relay"];
-
-function isRelayCarrier(rate: ShippingRate | null) {
-  if (!rate) return false;
-  return (
-    RELAY_CARRIERS.includes(rate.carrier) ||
-    rate.name.toLowerCase().includes("relais") ||
-    rate.name.toLowerCase().includes("relay") ||
-    rate.name.toLowerCase().includes("shop2shop")
-  );
-}
-
-function isChronopostRelay(rate: ShippingRate | null) {
-  return rate?.carrier === "chronopost_relay";
-}
-
-// Fallback rates when Sendcloud has no carrier contracts configured
-function getFallbackRates(country: string): ShippingRate[] {
-  if (country === "FR") {
-    return [
-      { id: -2, name: "Mondial Relay - Point Relais", carrier: "mondial_relay", price: 3.90, min_days: 3, max_days: 5 },
-      { id: -1, name: "Livraison à domicile", carrier: "colissimo", price: 4.90, min_days: 2, max_days: 3 },
-      { id: -3, name: "Chronopost Shop2Shop - Point Relais", carrier: "chronopost_relay", price: 6.90, min_days: 1, max_days: 2 },
-    ];
-  }
-  if (EU_COUNTRIES.includes(country) || country === "GB") {
-    return [
-      { id: -10, name: "Colissimo International", carrier: "colissimo", price: 9.90, min_days: 3, max_days: 7 },
-      { id: -11, name: "Colissimo International Signature", carrier: "colissimo", price: 12.90, min_days: 3, max_days: 7 },
-    ];
-  }
-  return [
-    { id: -20, name: "Colissimo International", carrier: "colissimo", price: 19.90, min_days: 5, max_days: 12 },
-  ];
-}
-
+type DeliveryType = "domicile" | "relais";
 type Step = "address" | "shipping" | "confirm";
+
+function getHomePrice(country: string): number {
+  if (country === "FR") return 4.90;
+  if (["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"].includes(country)) return 9.90;
+  return 19.90;
+}
+
+function getHomeDays(country: string): string {
+  if (country === "FR") return "2–3";
+  return "3–7";
+}
 
 export default function Commande() {
   const { items, total } = useCartStore();
-  const [step, setStep]   = useState<Step>("address");
+  const [step, setStep]         = useState<Step>("address");
   const [loading, setLoading]   = useState(false);
-  const [ratesLoading, setRatesLoading] = useState(false);
-  const [rates, setRates]       = useState<ShippingRate[]>([]);
-  const [selectedRate, setSelectedRate] = useState<ShippingRate | null>(null);
-
-  // Relay point state
-  const [selectedServicePoint, setSelectedServicePoint] = useState<RelayPoint | null>(null);
+  const [deliveryType, setDeliveryType] = useState<DeliveryType>("domicile");
+  const [selectedRelayPoint, setSelectedRelayPoint] = useState<BoxtalParcelShop | null>(null);
 
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
@@ -89,71 +59,39 @@ export default function Commande() {
     "w-full px-4 py-3 rounded-lg border border-white/10 bg-[#1a1a1a] text-white text-sm focus:outline-none focus:border-[#ff9ed5] placeholder-gray-600";
   const labelClass = "block text-sm font-medium text-gray-300 mb-1.5";
 
-  // Total weight of cart
   const totalWeight = items.reduce((acc, item) => {
     const product = getProductBySlug(item.slug);
     return acc + (product?.poids ?? 0.2) * item.quantity;
   }, 0);
 
-  // Free shipping threshold — France métropolitaine only
   const orderTotal = total();
   const freeShipping = orderTotal >= 50 && form.pays === "FR";
+  const relayAvailable = RELAY_COUNTRIES.includes(form.pays);
 
-  const handleRateSelect = (rate: ShippingRate) => {
-    setSelectedRate(rate);
-    setSelectedServicePoint(null);
-  };
+  const homePrice  = freeShipping ? 0 : getHomePrice(form.pays);
+  const relayPrice = freeShipping ? 0 : 3.90;
 
-  const fetchRates = async () => {
-    setRatesLoading(true);
-    try {
-      const res = await fetch("/api/shipping-rates", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ weightKg: totalWeight, toCountry: form.pays }),
-      });
-      const data = await res.json();
-      let fetchedRates: ShippingRate[] = data.rates ?? [];
+  const shippingCost = deliveryType === "relais" ? relayPrice : homePrice;
 
-      if (fetchedRates.length === 0) {
-        fetchedRates = getFallbackRates(form.pays);
-      }
+  const canConfirm =
+    deliveryType === "domicile" ||
+    (deliveryType === "relais" && selectedRelayPoint !== null);
 
-      setRates(fetchedRates);
-      if (fetchedRates.length > 0) {
-        handleRateSelect(fetchedRates[0]);
-      }
-    } catch {
-      const fallback = getFallbackRates(form.pays);
-      setRates(fallback);
-      if (fallback.length > 0) handleRateSelect(fallback[0]);
-    } finally {
-      setRatesLoading(false);
-    }
-  };
-
-  const handleAddressSubmit = async (e: React.FormEvent) => {
+  const handleAddressSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const isFreeShipping = orderTotal >= 50 && form.pays === "FR";
-    if (isFreeShipping) {
-      setSelectedRate({ id: 0, name: t({ fr: "Livraison standard offerte", en: "Free standard shipping" }), carrier: "", price: 0, min_days: 2, max_days: 4 });
-      setRates([]);
-      setStep("shipping");
-    } else {
-      await fetchRates();
-      setStep("shipping");
-    }
+    if (!relayAvailable) setDeliveryType("domicile");
+    setStep("shipping");
   };
-
-  // Can proceed to confirm?
-  const canConfirm = freeShipping || (
-    selectedRate !== null && (!isRelayCarrier(selectedRate) || selectedServicePoint !== null)
-  );
 
   const handlePayment = async () => {
     setLoading(true);
     try {
-      const shippingCost = freeShipping ? 0 : (selectedRate?.price ?? 4.9);
+      const shippingMethodName = deliveryType === "relais"
+        ? (selectedRelayPoint?.network === "MONR"
+            ? "Mondial Relay - Point Relais"
+            : "Chronopost Shop2Shop - Point Relais")
+        : "Livraison à domicile";
+
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -165,14 +103,15 @@ export default function Commande() {
           ville:   form.ville,
           cp:      form.cp,
           pays:    form.pays,
-          shippingMethodId:   selectedRate?.id,
-          shippingMethodName: selectedRate?.name,
+          shippingMethodName,
           shippingCost,
-          marketingConsent,
-          servicePointId:   selectedServicePoint?.id ?? null,
-          servicePointName: selectedServicePoint
-            ? `${selectedServicePoint.name} — ${selectedServicePoint.address}, ${selectedServicePoint.postalCode} ${selectedServicePoint.city}`
+          totalWeight,
+          servicePointId:      selectedRelayPoint?.id ?? null,
+          servicePointName:    selectedRelayPoint
+            ? `${selectedRelayPoint.name} — ${selectedRelayPoint.address}, ${selectedRelayPoint.postalCode} ${selectedRelayPoint.city}`
             : null,
+          servicePointNetwork: selectedRelayPoint?.network ?? null,
+          marketingConsent,
         }),
       });
       const data = await res.json();
@@ -197,8 +136,6 @@ export default function Commande() {
     );
   }
 
-  const shippingCost = freeShipping ? 0 : (selectedRate?.price ?? null);
-
   return (
     <div className="max-w-4xl mx-auto px-4 py-16">
       <h1 className="font-playfair text-4xl font-bold text-white mb-2">{t(tr.checkout_title)}</h1>
@@ -206,7 +143,11 @@ export default function Commande() {
       {/* Steps indicator */}
       <div className="flex items-center gap-2 mb-10 text-sm">
         {(["address", "shipping", "confirm"] as Step[]).map((s, i) => {
-          const labels = { address: t({ fr: "Adresse", en: "Address" }), shipping: t({ fr: "Livraison", en: "Shipping" }), confirm: t({ fr: "Paiement", en: "Payment" }) };
+          const labels = {
+            address:  t({ fr: "Adresse",   en: "Address"  }),
+            shipping: t({ fr: "Livraison", en: "Shipping" }),
+            confirm:  t({ fr: "Paiement",  en: "Payment"  }),
+          };
           const active = s === step;
           const done   = (step === "shipping" && s === "address") || (step === "confirm" && s !== "confirm");
           return (
@@ -281,92 +222,91 @@ export default function Commande() {
           {/* ── STEP 2: Shipping ── */}
           {step === "shipping" && (
             <div className="flex flex-col gap-4">
-              {freeShipping ? (
-                <>
-                  <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-green-400 text-sm font-medium">
-                    🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
+
+              {freeShipping && (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 text-green-400 text-sm font-medium">
+                  🎉 {t({ fr: "Livraison offerte pour cette commande !", en: "Free shipping on this order!" })}
+                </div>
+              )}
+
+              {/* Option 1 — Domicile */}
+              <button
+                onClick={() => setDeliveryType("domicile")}
+                className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
+                  deliveryType === "domicile"
+                    ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
+                    : "border-[#1f1f1f] hover:border-white/20"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                      deliveryType === "domicile" ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
+                    }`} />
+                    <div>
+                      <p className="text-white font-medium text-sm">
+                        {t({ fr: "Livraison à domicile", en: "Home delivery" })}
+                      </p>
+                      <p className="text-gray-500 text-xs mt-0.5">
+                        {getHomeDays(form.pays)} {t({ fr: "jours ouvrés", en: "business days" })}
+                      </p>
+                    </div>
                   </div>
-                  <div className="w-full text-left bg-[#111] border border-[#ff9ed5] rounded-xl p-4 shadow-[0_0_15px_rgba(255,158,213,0.15)]">
+                  <span className={`font-semibold text-sm ${freeShipping ? "text-green-400" : "text-white"}`}>
+                    {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${homePrice.toFixed(2)} €`}
+                  </span>
+                </div>
+              </button>
+
+              {/* Option 2 — Point Relais (France only) */}
+              {relayAvailable && (
+                <div className="flex flex-col">
+                  <button
+                    onClick={() => setDeliveryType("relais")}
+                    className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
+                      deliveryType === "relais"
+                        ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)] rounded-b-none"
+                        : "border-[#1f1f1f] hover:border-white/20"
+                    }`}
+                  >
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-4 h-4 rounded-full border-2 flex-shrink-0 border-[#ff9ed5] bg-[#ff9ed5]" />
+                        <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
+                          deliveryType === "relais" ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
+                        }`} />
                         <div>
                           <p className="text-white font-medium text-sm">
-                            {t({ fr: "Livraison standard offerte", en: "Free standard shipping" })}
+                            {t({ fr: "Point Relais", en: "Relay Point" })}
                           </p>
                           <p className="text-gray-500 text-xs mt-0.5">
-                            {t({ fr: "2–4 jours ouvrés", en: "2–4 business days" })}
+                            {t({ fr: "Mondial Relay ou Chronopost — 2–5 jours", en: "Mondial Relay or Chronopost — 2–5 days" })}
                           </p>
                         </div>
                       </div>
-                      <span className="font-semibold text-sm text-green-400">
-                        {t({ fr: "Gratuit", en: "Free" })}
+                      <span className={`font-semibold text-sm ${freeShipping ? "text-green-400" : "text-white"}`}>
+                        {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${relayPrice.toFixed(2)} €`}
                       </span>
                     </div>
-                  </div>
-                </>
-              ) : ratesLoading ? (
-                <div className="text-center py-10 text-gray-400 text-sm">
-                  {t({ fr: "Chargement des options de livraison...", en: "Loading shipping options..." })}
-                </div>
-              ) : (
-                <>
-                  {rates.map((rate) => (
-                    <div key={rate.id} className="flex flex-col gap-0">
-                      <button
-                        onClick={() => handleRateSelect(rate)}
-                        className={`w-full text-left bg-[#111] border rounded-xl p-4 transition-all ${
-                          selectedRate?.id === rate.id
-                            ? "border-[#ff9ed5] shadow-[0_0_15px_rgba(255,158,213,0.15)]"
-                            : "border-[#1f1f1f] hover:border-white/20"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 ${
-                              selectedRate?.id === rate.id ? "border-[#ff9ed5] bg-[#ff9ed5]" : "border-white/30"
-                            }`} />
-                            <div>
-                              <p className="text-white font-medium text-sm">{rate.name}</p>
-                              <p className="text-gray-500 text-xs mt-0.5">
-                                {rate.min_days === rate.max_days
-                                  ? `${rate.min_days} ${t({ fr: "jour(s)", en: "day(s)" })}`
-                                  : `${rate.min_days}–${rate.max_days} ${t({ fr: "jours", en: "days" })}`}
-                              </p>
-                            </div>
-                          </div>
-                          <span className="font-semibold text-sm text-white">
-                            {rate.price.toFixed(2)} €
-                          </span>
-                        </div>
-                      </button>
+                  </button>
 
-                      {/* ── Sélecteur de point relais ── */}
-                      {selectedRate?.id === rate.id && isRelayCarrier(rate) && (
-                        <div className="border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3 bg-[#0d0d0d]">
-                          {isChronopostRelay(rate) ? (
-                            <ChronopostPointPicker
-                              postalCode={form.cp}
-                              city={form.ville}
-                              address={form.adresse}
-                              onSelect={(p: ChronoParcelShop) => setSelectedServicePoint(p)}
-                              selectedPoint={selectedServicePoint as ChronoParcelShop | null}
-                              t={t}
-                            />
-                          ) : (
-                            <RelayPointPicker
-                              postalCode={form.cp}
-                              country={form.pays}
-                              onSelect={setSelectedServicePoint}
-                              selectedPoint={selectedServicePoint}
-                              t={t}
-                            />
-                          )}
-                        </div>
-                      )}
+                  {deliveryType === "relais" && (
+                    <div className="border border-t-0 border-[#ff9ed5]/40 rounded-b-xl px-4 pb-4 pt-3 bg-[#0d0d0d]">
+                      <BoxtalRelayPicker
+                        postalCode={form.cp}
+                        onSelect={setSelectedRelayPoint}
+                        selectedPoint={selectedRelayPoint}
+                        t={t}
+                      />
                     </div>
-                  ))}
-                </>
+                  )}
+                </div>
+              )}
+
+              {/* Hint */}
+              {deliveryType === "relais" && !selectedRelayPoint && (
+                <p className="text-xs text-amber-400/80 text-center -mt-1">
+                  {t({ fr: "Veuillez sélectionner un point relais pour continuer.", en: "Please select a relay point to continue." })}
+                </p>
               )}
 
               <div className="flex gap-3 mt-2">
@@ -381,13 +321,6 @@ export default function Commande() {
                   {t({ fr: "Confirmer →", en: "Confirm →" })}
                 </button>
               </div>
-
-              {/* Hint when relay is selected but no point chosen yet */}
-              {selectedRate && isRelayCarrier(selectedRate) && !selectedServicePoint && (
-                <p className="text-xs text-amber-400/80 text-center -mt-1">
-                  {t({ fr: "Veuillez sélectionner un point relais pour continuer.", en: "Please select a relay point to continue." })}
-                </p>
-              )}
             </div>
           )}
 
@@ -409,32 +342,34 @@ export default function Commande() {
               </div>
 
               {/* Shipping recap */}
-              {selectedRate && (
-                <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-5">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-white font-medium text-sm">{t({ fr: "Mode de livraison", en: "Shipping method" })}</h3>
-                    <button onClick={() => setStep("shipping")} className="text-[#ff9ed5] text-xs hover:underline">
-                      {t({ fr: "Modifier", en: "Edit" })}
-                    </button>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-400">{selectedRate.name}</span>
-                    <span className={freeShipping ? "text-green-400" : "text-white"}>
-                      {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${selectedRate.price.toFixed(2)} €`}
-                    </span>
-                  </div>
-                  {selectedServicePoint && (
-                    <div className="mt-2 pt-2 border-t border-white/[0.06]">
-                      <p className="text-xs text-gray-500">{t({ fr: "Point relais", en: "Relay point" })}</p>
-                      <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedServicePoint.name}</p>
-                      <p className="text-xs text-gray-500">{selectedServicePoint.address}, {selectedServicePoint.postalCode} {selectedServicePoint.city}</p>
-                    </div>
-                  )}
+              <div className="bg-[#111] border border-[#1f1f1f] rounded-xl p-5">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-white font-medium text-sm">{t({ fr: "Mode de livraison", en: "Shipping method" })}</h3>
+                  <button onClick={() => setStep("shipping")} className="text-[#ff9ed5] text-xs hover:underline">
+                    {t({ fr: "Modifier", en: "Edit" })}
+                  </button>
                 </div>
-              )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-400">
+                    {deliveryType === "domicile"
+                      ? t({ fr: "Livraison à domicile", en: "Home delivery" })
+                      : t({ fr: "Point Relais", en: "Relay Point" })}
+                  </span>
+                  <span className={freeShipping ? "text-green-400" : "text-white"}>
+                    {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${shippingCost.toFixed(2)} €`}
+                  </span>
+                </div>
+                {selectedRelayPoint && (
+                  <div className="mt-2 pt-2 border-t border-white/[0.06]">
+                    <p className="text-xs text-gray-500">{t({ fr: "Point relais sélectionné", en: "Selected relay point" })}</p>
+                    <p className="text-xs text-gray-300 mt-0.5 font-medium">{selectedRelayPoint.name}</p>
+                    <p className="text-xs text-gray-500">{selectedRelayPoint.address}, {selectedRelayPoint.postalCode} {selectedRelayPoint.city}</p>
+                  </div>
+                )}
+              </div>
 
               {/* RGPD — consentement marketing */}
-              <label className="flex items-start gap-3 cursor-pointer group">
+              <label className="flex items-start gap-3 cursor-pointer">
                 <div className="relative mt-0.5 flex-shrink-0">
                   <input
                     type="checkbox"
@@ -442,7 +377,10 @@ export default function Commande() {
                     onChange={(e) => setMarketingConsent(e.target.checked)}
                     className="sr-only peer"
                   />
-                  <div className="w-4 h-4 border border-white/20 rounded bg-[#1a1a1a] peer-checked:bg-[#ff9ed5] peer-checked:border-[#ff9ed5] transition-colors flex items-center justify-center">
+                  <div
+                    className="w-4 h-4 border border-white/20 rounded bg-[#1a1a1a] transition-colors flex items-center justify-center"
+                    style={marketingConsent ? { background: "#ff9ed5", borderColor: "#ff9ed5" } : {}}
+                  >
                     {marketingConsent && (
                       <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 10 10">
                         <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -482,21 +420,20 @@ export default function Commande() {
             </div>
             <div className="flex justify-between text-sm text-gray-400">
               <span>{t(tr.cart_shipping)}</span>
-              <span className={freeShipping ? "text-green-400" : "text-white"}>
-                {freeShipping
-                  ? t(tr.cart_shipping_free)
-                  : shippingCost !== null
-                    ? `${shippingCost.toFixed(2)} €`
-                    : "—"}
+              <span className={freeShipping ? "text-green-400" : step === "address" ? "" : "text-white"}>
+                {step === "address"
+                  ? "—"
+                  : freeShipping
+                    ? t(tr.cart_shipping_free)
+                    : `${shippingCost.toFixed(2)} €`}
               </span>
             </div>
             <div className="flex justify-between font-semibold text-white pt-1 border-t border-white/[0.08]">
               <span>{t(tr.cart_total)}</span>
               <span>
-                {(freeShipping
-                  ? orderTotal
-                  : orderTotal + (shippingCost ?? 0)
-                ).toFixed(2)} €
+                {step === "address"
+                  ? `${orderTotal.toFixed(2)} €`
+                  : `${(orderTotal + (freeShipping ? 0 : shippingCost)).toFixed(2)} €`}
               </span>
             </div>
           </div>
