@@ -75,7 +75,9 @@ export async function POST(req: NextRequest) {
     const data = await res.json();
     const content = data.content ?? [];
 
-    const points: BoxtalParcelShop[] = content.map((item: {
+    const points: BoxtalParcelShop[] = content.filter((item: {
+      parcelPoint: { network: string };
+    }) => networkList.includes(item.parcelPoint.network)).map((item: {
       distanceFromSearchLocation: number;
       parcelPoint: {
         code: string;

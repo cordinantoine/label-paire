@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       apiVersion: "2026-02-25.clover",
     });
 
-    const { items, email, nom, adresse, ville, cp, pays, shippingMethodId, shippingMethodName, shippingCost } = await req.json();
+    const { items, email, nom, adresse, ville, cp, pays, shippingMethodId, shippingMethodName, shippingCost, marketingConsent } = await req.json();
 
     const lineItems = items.map(
       (item: { nom: string; prix: number; quantity: number }) => ({
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
         items:             JSON.stringify(itemsWithPoids),
         shipping_method_id: String(shippingMethodId ?? ""),
         shipping_method:   shippingMethodName ?? "",
+        marketing_consent: marketingConsent ? "true" : "false",
       },
       success_url: `${baseUrl}/commande/succes?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${baseUrl}/panier`,

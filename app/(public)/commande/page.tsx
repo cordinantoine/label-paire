@@ -82,6 +82,7 @@ export default function Commande() {
   const [form, setForm] = useState({
     nom: "", email: "", adresse: "", ville: "", cp: "", pays: "FR",
   });
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const { t } = useT();
 
   const inputClass =
@@ -167,6 +168,7 @@ export default function Commande() {
           shippingMethodId:   selectedRate?.id,
           shippingMethodName: selectedRate?.name,
           shippingCost,
+          marketingConsent,
           servicePointId:   selectedServicePoint?.id ?? null,
           servicePointName: selectedServicePoint
             ? `${selectedServicePoint.name} — ${selectedServicePoint.address}, ${selectedServicePoint.postalCode} ${selectedServicePoint.city}`
@@ -430,6 +432,28 @@ export default function Commande() {
                   )}
                 </div>
               )}
+
+              {/* RGPD — consentement marketing */}
+              <label className="flex items-start gap-3 cursor-pointer group">
+                <div className="relative mt-0.5 flex-shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={marketingConsent}
+                    onChange={(e) => setMarketingConsent(e.target.checked)}
+                    className="sr-only peer"
+                  />
+                  <div className="w-4 h-4 border border-white/20 rounded bg-[#1a1a1a] peer-checked:bg-[#ff9ed5] peer-checked:border-[#ff9ed5] transition-colors flex items-center justify-center">
+                    {marketingConsent && (
+                      <svg className="w-2.5 h-2.5 text-black" fill="none" viewBox="0 0 10 10">
+                        <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-xs text-gray-500 leading-relaxed">
+                  J&apos;accepte de recevoir des offres et nouveautés de Label Paire par email. Désinscription possible à tout moment.
+                </span>
+              </label>
 
               <button onClick={handlePayment} disabled={loading}
                 className="btn-shimmer text-[#0a0a0a] font-semibold py-4 rounded-lg text-sm disabled:opacity-60 disabled:cursor-not-allowed">

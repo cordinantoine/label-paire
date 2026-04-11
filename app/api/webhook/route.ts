@@ -74,6 +74,8 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
 
   try {
     // Upsert customer (un client peut commander plusieurs fois)
+    const hasConsent = meta.marketing_consent === "true";
+
     const customer = await prisma.customer.upsert({
       where: { email: meta.email ?? "" },
       update: {
@@ -82,14 +84,17 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
         ville:   meta.ville   ?? "",
         cp:      meta.cp      ?? "",
         pays:    meta.pays    ?? "FR",
+        // Ne révoquer le consentement que si explicitement false (pas si absent)
+        ...(hasConsent ? { marketingConsent: true } : {}),
       },
       create: {
-        email:   meta.email   ?? "",
-        nom:     meta.nom     ?? "",
-        adresse: meta.adresse ?? "",
-        ville:   meta.ville   ?? "",
-        cp:      meta.cp      ?? "",
-        pays:    meta.pays    ?? "FR",
+        email:           meta.email   ?? "",
+        nom:             meta.nom     ?? "",
+        adresse:         meta.adresse ?? "",
+        ville:           meta.ville   ?? "",
+        cp:              meta.cp      ?? "",
+        pays:            meta.pays    ?? "FR",
+        marketingConsent: hasConsent,
       },
     });
 
