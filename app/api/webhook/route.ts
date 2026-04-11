@@ -5,6 +5,7 @@ import { createBoxtalOrder } from "@/lib/boxtalOrder";
 import { prisma } from "@/lib/prisma";
 import { getProductBySlug } from "@/lib/products";
 import { orderConfirmationHtml, orderConfirmationText } from "@/lib/emails/orderConfirmation";
+import { syncBrevoContact } from "@/lib/brevo";
 
 // Disable body parsing — Stripe needs the raw body for signature verification
 export const dynamic = "force-dynamic";
@@ -71,8 +72,6 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
   );
 
   // ── Sauvegarde en base de données ──────────────────────────────────────────
-
-  let trackingNumber: string | undefined;
 
   try {
     // Upsert customer (un client peut commander plusieurs fois)
@@ -157,36 +156,44 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     }
   }
 
-  // ── Création du colis Sendcloud / Boxtal ───────────────────────────────────
+  // ── Sync Brevo ────────────────────────────────────────────────────────────
 
-  const result = await createSendcloudParcel({
-    name:        meta.nom      ?? "Client",
-    address:     meta.adresse  ?? "",
-    city:        meta.ville    ?? "",
-    postalCode:  meta.cp       ?? "",
-    country:     meta.pays     ?? "FR",
-    email:       meta.email    ?? "",
-    orderNumber: session.id,
-    weightKg,
-    requestLabel: false,
+  await syncBrevoContact({
+    email:           meta.email    ?? "",
+    nom:             meta.nom      ?? "",
+    ville:           meta.ville,
+    pays:            meta.pays,
+    marketingConsent: meta.marketing_consent === "true",
+    orderTotal:      session.amount_total ?? 0,
+    orderId:         session.id,
   });
 
-  if (result.ok) {
-    trackingNumber = result.parcel.tracking_number;
-    console.log(`✅ Sendcloud parcel created — tracking: ${trackingNumber}`);
+  // ── Création de la commande Boxtal ────────────────────────────────────────
 
-    // Sauvegarder le numéro de suivi en DB
-    if (trackingNumber) {
-      try {
-        await prisma.order.update({
-          where: { id: session.id },
-          data: { trackingNumber, shippingStatus: "label_created" },
-        });
-      } catch (err) {
-        console.error("❌ DB — Erreur mise à jour tracking:", err);
-      }
+  const boxtalResult = await createBoxtalOrder({
+    orderReference:      session.id,
+    recipientName:       meta.nom      ?? "Client",
+    recipientEmail:      meta.email    ?? "",
+    recipientStreet:     meta.adresse  ?? "",
+    recipientCity:       meta.ville    ?? "",
+    recipientPostalCode: meta.cp       ?? "",
+    recipientCountry:    meta.pays     ?? "FR",
+    weightKg,
+    network:             meta.service_point_network ?? "",
+    parcelPointCode:     meta.service_point_id      || undefined,
+  });
+
+  if (boxtalResult.ok) {
+    console.log(`✅ Boxtal order created — code: ${boxtalResult.orderCode}`);
+    try {
+      await prisma.order.update({
+        where: { id: session.id },
+        data: { shippingStatus: "label_created" },
+      });
+    } catch (err) {
+      console.error("❌ DB — Erreur mise à jour shippingStatus:", err);
     }
   } else {
-    console.error(`❌ Sendcloud error: ${result.error}`);
+    console.error(`❌ Boxtal order error: ${boxtalResult.error}`);
   }
 }
