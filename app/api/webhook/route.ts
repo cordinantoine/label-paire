@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createSendcloudParcel } from "@/lib/sendcloud";
+import { prisma } from "@/lib/prisma";
+import { getProductBySlug } from "@/lib/products";
 
 // Disable body parsing — Stripe needs the raw body for signature verification
 export const dynamic = "force-dynamic";
@@ -40,18 +42,83 @@ export async function POST(req: NextRequest) {
 async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
   const meta = session.metadata ?? {};
 
-  // Compute total weight from items stored in metadata
-  let weightKg = 0;
+  // Parse items depuis les métadonnées Stripe
+  let rawItems: { slug: string; quantity: number; poids: number }[] = [];
   try {
-    const items: { slug: string; quantity: number; poids: number }[] =
-      JSON.parse(meta.items ?? "[]");
-    weightKg = items.reduce((acc, i) => acc + i.poids * i.quantity, 0);
+    rawItems = JSON.parse(meta.items ?? "[]");
   } catch {
-    weightKg = 0.5; // fallback
+    rawItems = [];
   }
 
-  // Minimum weight for carriers
-  if (weightKg < 0.1) weightKg = 0.1;
+  // Enrichir les items avec nom et prix depuis le catalogue produits
+  const enrichedItems = rawItems.map((item) => {
+    const product = getProductBySlug(item.slug);
+    return {
+      slug: item.slug,
+      nom: product?.nom ?? item.slug,
+      prix: product?.prix ?? 0,
+      quantity: item.quantity,
+      poids: item.poids,
+    };
+  });
+
+  // Calcul du poids total pour l'expédition
+  const weightKg = Math.max(
+    rawItems.reduce((acc, i) => acc + i.poids * i.quantity, 0),
+    0.1
+  );
+
+  // ── Sauvegarde en base de données ──────────────────────────────────────────
+
+  let trackingNumber: string | undefined;
+
+  try {
+    // Upsert customer (un client peut commander plusieurs fois)
+    const customer = await prisma.customer.upsert({
+      where: { email: meta.email ?? "" },
+      update: {
+        nom:     meta.nom     ?? "",
+        adresse: meta.adresse ?? "",
+        ville:   meta.ville   ?? "",
+        cp:      meta.cp      ?? "",
+        pays:    meta.pays    ?? "FR",
+      },
+      create: {
+        email:   meta.email   ?? "",
+        nom:     meta.nom     ?? "",
+        adresse: meta.adresse ?? "",
+        ville:   meta.ville   ?? "",
+        cp:      meta.cp      ?? "",
+        pays:    meta.pays    ?? "FR",
+      },
+    });
+
+    // Créer la commande (idempotent — skip si déjà existante)
+    await prisma.order.upsert({
+      where: { id: session.id },
+      update: {},
+      create: {
+        id:              session.id,
+        amountTotal:     session.amount_total ?? 0,
+        currency:        session.currency ?? "eur",
+        paymentStatus:   session.payment_status ?? "paid",
+        items:           enrichedItems,
+        shippingMethod:  meta.shipping_method   ?? "",
+        shippingMethodId: meta.shipping_method_id ?? "",
+        shippingCost:    0, // will be set below if known
+        paymentIntentId: typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : (session.payment_intent?.id ?? null),
+        customerId: customer.id,
+      },
+    });
+
+    console.log(`✅ DB — Commande ${session.id} sauvegardée`);
+  } catch (err) {
+    console.error("❌ DB — Erreur sauvegarde commande:", err);
+  }
+
+  // ── Création du colis Sendcloud / Boxtal ───────────────────────────────────
 
   const result = await createSendcloudParcel({
     name:        meta.nom      ?? "Client",
@@ -62,11 +129,24 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     email:       meta.email    ?? "",
     orderNumber: session.id,
     weightKg,
-    requestLabel: false, // set to true to auto-generate label
+    requestLabel: false,
   });
 
   if (result.ok) {
-    console.log(`✅ Sendcloud parcel created — tracking: ${result.parcel.tracking_number}`);
+    trackingNumber = result.parcel.tracking_number;
+    console.log(`✅ Sendcloud parcel created — tracking: ${trackingNumber}`);
+
+    // Sauvegarder le numéro de suivi en DB
+    if (trackingNumber) {
+      try {
+        await prisma.order.update({
+          where: { id: session.id },
+          data: { trackingNumber, shippingStatus: "label_created" },
+        });
+      } catch (err) {
+        console.error("❌ DB — Erreur mise à jour tracking:", err);
+      }
+    }
   } else {
     console.error(`❌ Sendcloud error: ${result.error}`);
   }

@@ -1,0 +1,47 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  nom       String
+  adresse   String
+  ville     String
+  cp        String
+  pays      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model Order {
+  id               String   @id // = Stripe session ID (cs_...)
+  createdAt        DateTime @default(now())
+  amountTotal      Int // centimes
+  currency         String   @default("eur")
+  paymentStatus    String // "paid" | "unpaid"
+  items            Json // [{ slug, nom, prix, quantity, poids }]
+  shippingMethod   String
+  shippingMethodId String
+  shippingCost     Int      @default(0) // centimes
+  trackingNumber   String?
+  shippingStatus   String   @default("label_created") // label_created | shipped | delivered
+  paymentIntentId  String?
+  customerId       String
+  customer         Customer @relation(fields: [customerId], references: [id])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  description String
+  amount      Int // centimes
+  category    String // "stock" | "frais" | "marketing" | "autre"
+  date        DateTime
+  createdAt   DateTime @default(now())
+}
