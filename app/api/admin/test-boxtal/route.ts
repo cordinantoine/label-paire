@@ -2,14 +2,25 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyJwt } from "@/lib/admin-auth";
 import { getBoxtalToken } from "@/lib/boxtalToken";
 
-const BOXTAL_ORDER_URL = "https://api.boxtal.com/shipping/v3.1/shipping-order";
+export async function GET(req: NextRequest) {
+  const token = req.cookies.get("admin_token")?.value;
+  const payload = token ? await verifyJwt(token) : null;
+  if (!payload) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+
+  const bearerToken = await getBoxtalToken();
+
+  const res = await fetch("https://api.boxtal.com/shipping/v3.1/networks", {
+    headers: { Authorization: `Bearer ${bearerToken}`, Accept: "application/json" },
+  });
+
+  const text = await res.text();
+  return NextResponse.json({ status: res.status, body: text });
+}
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get("admin_token")?.value;
   const payload = token ? await verifyJwt(token) : null;
-  if (!payload) {
-    return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-  }
+  if (!payload) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
   const bearerToken = await getBoxtalToken();
 
@@ -36,12 +47,12 @@ export async function POST(req: NextRequest) {
     parcels: [
       { weight: 0.3, length: 30, width: 20, height: 5 },
     ],
-    network: "COPR",
+    network: "CHRB",  // Chronopost home delivery
   };
 
   const body = { shipment };
 
-  const res = await fetch(BOXTAL_ORDER_URL, {
+  const res = await fetch("https://api.boxtal.com/shipping/v3.1/shipping-order", {
     method: "POST",
     headers: {
       Authorization:  `Bearer ${bearerToken}`,
@@ -52,10 +63,5 @@ export async function POST(req: NextRequest) {
   });
 
   const responseText = await res.text();
-
-  return NextResponse.json({
-    status: res.status,
-    requestBody: body,
-    responseBody: responseText,
-  });
+  return NextResponse.json({ status: res.status, requestBody: body, responseBody: responseText });
 }
