@@ -29,7 +29,7 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
       orderReference: input.orderReference,
       fromAddress: {
         company:        "Label Paire",
-        contactName:    "Label Paire",
+        contact:        "Label Paire",
         email:          process.env.SENDER_EMAIL        ?? "commandes@labelpaire.fr",
         phone:          process.env.SENDER_PHONE        ?? "",
         street:         process.env.SENDER_STREET       ?? "9 Boulevard du Temple",
@@ -38,7 +38,7 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
         countryIsoCode: "FR",
       },
       toAddress: {
-        contactName:    input.recipientName,
+        contact:        input.recipientName,
         email:          input.recipientEmail,
         street:         input.recipientStreet,
         city:           input.recipientCity,
