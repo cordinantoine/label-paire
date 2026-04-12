@@ -27,27 +27,23 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
 
     const shipment: Record<string, unknown> = {
       orderReference: input.orderReference,
-      sender: {
-        company: "Label Paire",
-        contactName: "Label Paire",
-        email: process.env.SENDER_EMAIL ?? "commandes@labelpaire.fr",
-        phone: process.env.SENDER_PHONE ?? "",
-        address: {
-          street:         process.env.SENDER_STREET      ?? "9 Boulevard du Temple",
-          city:           process.env.SENDER_CITY        ?? "Chatou",
-          postalCode:     process.env.SENDER_POSTAL_CODE ?? "78400",
-          countryIsoCode: "FR",
-        },
+      fromAddress: {
+        company:        "Label Paire",
+        contactName:    "Label Paire",
+        email:          process.env.SENDER_EMAIL        ?? "commandes@labelpaire.fr",
+        phone:          process.env.SENDER_PHONE        ?? "",
+        street:         process.env.SENDER_STREET       ?? "9 Boulevard du Temple",
+        city:           process.env.SENDER_CITY         ?? "Chatou",
+        postalCode:     process.env.SENDER_POSTAL_CODE  ?? "78400",
+        countryIsoCode: "FR",
       },
-      recipient: {
-        contactName:  input.recipientName,
-        email:        input.recipientEmail,
-        address: {
-          street:         input.recipientStreet,
-          city:           input.recipientCity,
-          postalCode:     input.recipientPostalCode,
-          countryIsoCode: input.recipientCountry || "FR",
-        },
+      toAddress: {
+        contactName:    input.recipientName,
+        email:          input.recipientEmail,
+        street:         input.recipientStreet,
+        city:           input.recipientCity,
+        postalCode:     input.recipientPostalCode,
+        countryIsoCode: input.recipientCountry || "FR",
       },
       parcels: [
         {
