@@ -25,7 +25,7 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
 
     const isRelay = input.network === "MONR" || input.network === "CHRP";
 
-    const body: Record<string, unknown> = {
+    const shipment: Record<string, unknown> = {
       orderReference: input.orderReference,
       sender: {
         company: "Label Paire",
@@ -61,8 +61,10 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
     };
 
     if (isRelay && input.parcelPointCode) {
-      body.parcelPointCode = input.parcelPointCode;
+      shipment.parcelPointCode = input.parcelPointCode;
     }
+
+    const body = { shipment };
 
     const res = await fetch(BOXTAL_ORDER_URL, {
       method: "POST",
