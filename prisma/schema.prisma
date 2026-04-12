@@ -46,3 +46,12 @@ model Expense {
   date        DateTime
   createdAt   DateTime @default(now())
 }
+
+model ShippingRate {
+  id          String @id @default(cuid())
+  country     String // "FR", "BE", "LU", etc.
+  maxWeightKg Float  // borne supérieure du palier en kg
+  priceEur    Float  // prix TTC en euros
+  minDays     Int
+  maxDays     Int
+}
