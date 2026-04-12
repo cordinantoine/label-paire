@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyJwt } from "@/lib/admin-auth";
-import { createBoxtalOrder } from "@/lib/boxtalOrder";
+import { getBoxtalToken } from "@/lib/boxtalToken";
+
+const BOXTAL_ORDER_URL = "https://api.boxtal.com/shipping/v3.1/shipping-order";
 
 export async function POST(req: NextRequest) {
   const token = req.cookies.get("admin_token")?.value;
@@ -9,17 +11,51 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
   }
 
-  const result = await createBoxtalOrder({
+  const bearerToken = await getBoxtalToken();
+
+  const shipment = {
     orderReference: `TEST-${Date.now()}`,
-    recipientName: "Jean Dupont",
-    recipientEmail: "test@labelpaire.fr",
-    recipientStreet: "10 Rue de Rivoli",
-    recipientCity: "Paris",
-    recipientPostalCode: "75001",
-    recipientCountry: "FR",
-    weightKg: 0.3,
-    network: "",  // livraison domicile (COPR)
+    fromAddress: {
+      company:        "Label Paire",
+      contact:        "Label Paire",
+      email:          "commandes@labelpaire.fr",
+      phone:          "0600000000",
+      street:         "9 Boulevard du Temple",
+      city:           "Chatou",
+      postalCode:     "78400",
+      countryIsoCode: "FR",
+    },
+    toAddress: {
+      contact:        "Jean Dupont",
+      email:          "test@labelpaire.fr",
+      street:         "10 Rue de Rivoli",
+      city:           "Paris",
+      postalCode:     "75001",
+      countryIsoCode: "FR",
+    },
+    parcels: [
+      { weight: 0.3, length: 30, width: 20, height: 5 },
+    ],
+    network: "COPR",
+  };
+
+  const body = { shipment };
+
+  const res = await fetch(BOXTAL_ORDER_URL, {
+    method: "POST",
+    headers: {
+      Authorization:  `Bearer ${bearerToken}`,
+      "Content-Type": "application/json",
+      Accept:         "application/json",
+    },
+    body: JSON.stringify(body),
   });
 
-  return NextResponse.json(result);
+  const responseText = await res.text();
+
+  return NextResponse.json({
+    status: res.status,
+    requestBody: body,
+    responseBody: responseText,
+  });
 }
