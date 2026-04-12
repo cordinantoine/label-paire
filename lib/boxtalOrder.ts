@@ -78,7 +78,7 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
 
     if (!res.ok) {
       console.error("Boxtal order error:", res.status, text);
-      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 200)}` };
+      return { ok: false, error: `HTTP ${res.status}: ${text.slice(0, 1000)}` };
     }
 
     const orderCode = (data.orderCode as string) ?? (data.code as string) ?? input.orderReference;
