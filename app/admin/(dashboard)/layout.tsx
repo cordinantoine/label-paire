@@ -20,6 +20,9 @@ export default function AdminLayout({
           <Link href="/admin/commandes" className="hover:text-[#ff9ed5] transition-colors">
             Commandes
           </Link>
+          <Link href="/admin/produits" className="hover:text-[#ff9ed5] transition-colors">
+            Produits
+          </Link>
           <Link href="/admin/depenses" className="hover:text-[#ff9ed5] transition-colors">
             Dépenses
           </Link>
