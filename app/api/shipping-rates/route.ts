@@ -32,10 +32,13 @@ function extractAll(xml: string, tag: string): string[] {
   return xml.match(new RegExp(`<${tag}[^>]*>[\\s\\S]*?</${tag}>`, "gi")) ?? [];
 }
 
-async function getHomeDomesticRate(weightKg: number): Promise<ShippingRate | null> {
+// Pays livrables en domicile via tarifs DB (pas Boxtal)
+const DB_HOME_COUNTRIES = ["FR", "BE", "LU", "NL", "DE", "ES", "PT", "IT", "AT"];
+
+async function getHomeRate(weightKg: number, country: string): Promise<ShippingRate | null> {
   const rate = await prisma.shippingRate.findFirst({
     where: {
-      country: "FR",
+      country,
       type: "home",
       maxWeightKg: { gte: weightKg },
     },
@@ -46,7 +49,7 @@ async function getHomeDomesticRate(weightKg: number): Promise<ShippingRate | nul
 
   return {
     id: -1,
-    name: "Chronopost — Livraison à domicile",
+    name: country === "FR" ? "Chronopost — Livraison à domicile" : "Livraison à domicile",
     carrier: "chronopost",
     price: rate.priceEur,
     min_days: rate.minDays,
@@ -128,14 +131,13 @@ export async function POST(req: NextRequest) {
   try {
     const { weightKg, toCountry = "FR", toZip = "75001", toCity = "Paris" } = await req.json();
 
-    // Livraison France : tarif domicile depuis la DB uniquement.
-    // Les points relais ont leurs propres API (/api/mr-parcelshops, etc.)
-    if (toCountry === "FR") {
-      const homeRate = await getHomeDomesticRate(weightKg);
+    // Pays supportés : tarif domicile depuis la DB (pas Boxtal)
+    if (DB_HOME_COUNTRIES.includes(toCountry)) {
+      const homeRate = await getHomeRate(weightKg, toCountry);
       return NextResponse.json({ rates: homeRate ? [homeRate] : [] });
     }
 
-    // Hors France : appel Boxtal standard
+    // Autres pays : appel Boxtal (non utilisé en production pour l'instant)
     const rates = await getBoxtalRates(weightKg, toCountry, toZip, toCity);
     return NextResponse.json({ rates });
   } catch (err) {

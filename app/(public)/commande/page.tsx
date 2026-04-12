@@ -13,16 +13,13 @@ const BoxtalRelayPicker = dynamic(() => import("@/components/BoxtalRelayPicker")
 const COUNTRIES = [
   { code: "FR", label: "France" },
   { code: "BE", label: "Belgique / België" },
-  { code: "CH", label: "Suisse / Schweiz" },
   { code: "LU", label: "Luxembourg" },
+  { code: "NL", label: "Nederland" },
   { code: "DE", label: "Deutschland" },
   { code: "ES", label: "España" },
-  { code: "IT", label: "Italia" },
-  { code: "NL", label: "Nederland" },
   { code: "PT", label: "Portugal" },
-  { code: "GB", label: "United Kingdom" },
-  { code: "US", label: "United States" },
-  { code: "CA", label: "Canada" },
+  { code: "IT", label: "Italia" },
+  { code: "AT", label: "Österreich" },
 ];
 
 // Relay only available for France
@@ -33,7 +30,7 @@ type Step = "address" | "shipping" | "confirm";
 
 function getHomeDays(country: string): string {
   if (country === "FR") return "3–5";
-  return "3–7";
+  return "3–7"; // EU : Belgique, Luxembourg, Pays-Bas, Allemagne, Espagne, Portugal, Italie, Autriche
 }
 
 export default function Commande() {
@@ -93,9 +90,7 @@ export default function Commande() {
       if (rate) setHomePrice(rate.price);
     } catch {
       // Fallback statique si l'API échoue
-      const fallback = form.pays === "FR" ? 9.49
-        : ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"].includes(form.pays) ? 9.90
-        : 19.90;
+      const fallback = form.pays === "FR" ? 9.49 : 14.90;
       setHomePrice(fallback);
     } finally {
       setLoadingRate(false);
