@@ -31,14 +31,8 @@ const RELAY_COUNTRIES = ["FR"];
 type DeliveryType = "domicile" | "relais";
 type Step = "address" | "shipping" | "confirm";
 
-function getHomePrice(country: string): number {
-  if (country === "FR") return 4.90;
-  if (["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"].includes(country)) return 9.90;
-  return 19.90;
-}
-
 function getHomeDays(country: string): string {
-  if (country === "FR") return "2–3";
+  if (country === "FR") return "3–5";
   return "3–7";
 }
 
@@ -46,6 +40,8 @@ export default function Commande() {
   const { items, total } = useCartStore();
   const [step, setStep]         = useState<Step>("address");
   const [loading, setLoading]   = useState(false);
+  const [loadingRate, setLoadingRate] = useState(false);
+  const [homePrice, setHomePrice] = useState<number>(0);
   const [deliveryType, setDeliveryType] = useState<DeliveryType>("domicile");
   const [selectedRelayPoint, setSelectedRelayPoint] = useState<BoxtalParcelShop | null>(null);
 
@@ -68,18 +64,42 @@ export default function Commande() {
   const freeShipping = orderTotal >= 50 && form.pays === "FR";
   const relayAvailable = RELAY_COUNTRIES.includes(form.pays);
 
-  const homePrice  = freeShipping ? 0 : getHomePrice(form.pays);
+  const homePriceDisplay = freeShipping ? 0 : homePrice;
   const relayPrice = freeShipping ? 0 : 3.90;
 
-  const shippingCost = deliveryType === "relais" ? relayPrice : homePrice;
+  const shippingCost = deliveryType === "relais" ? relayPrice : homePriceDisplay;
 
   const canConfirm =
     deliveryType === "domicile" ||
     (deliveryType === "relais" && selectedRelayPoint !== null);
 
-  const handleAddressSubmit = (e: React.FormEvent) => {
+  const handleAddressSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!relayAvailable) setDeliveryType("domicile");
+    setLoadingRate(true);
+    try {
+      const res = await fetch("/api/shipping-rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weightKg: totalWeight,
+          toCountry: form.pays,
+          toZip: form.cp || "75001",
+          toCity: form.ville || "Paris",
+        }),
+      });
+      const data = await res.json();
+      const rate = data.rates?.[0];
+      if (rate) setHomePrice(rate.price);
+    } catch {
+      // Fallback statique si l'API échoue
+      const fallback = form.pays === "FR" ? 9.49
+        : ["BE", "CH", "LU", "DE", "ES", "IT", "NL", "PT"].includes(form.pays) ? 9.90
+        : 19.90;
+      setHomePrice(fallback);
+    } finally {
+      setLoadingRate(false);
+    }
     setStep("shipping");
   };
 
@@ -253,7 +273,7 @@ export default function Commande() {
                     </div>
                   </div>
                   <span className={`font-semibold text-sm ${freeShipping ? "text-green-400" : "text-white"}`}>
-                    {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : `${homePrice.toFixed(2)} €`}
+                    {freeShipping ? t({ fr: "Gratuit", en: "Free" }) : loadingRate ? "…" : `${homePriceDisplay.toFixed(2)} €`}
                   </span>
                 </div>
               </button>
