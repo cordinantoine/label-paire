@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 
 export type ShippingRate = {
   id: number;
@@ -30,31 +29,6 @@ function extractTag(xml: string, tag: string): string {
 
 function extractAll(xml: string, tag: string): string[] {
   return xml.match(new RegExp(`<${tag}[^>]*>[\\s\\S]*?</${tag}>`, "gi")) ?? [];
-}
-
-// Pays livrables en domicile via tarifs DB (pas Boxtal)
-const DB_HOME_COUNTRIES = ["FR", "BE", "LU", "NL", "DE", "ES", "PT", "IT", "AT"];
-
-async function getHomeRate(weightKg: number, country: string): Promise<ShippingRate | null> {
-  const rate = await prisma.shippingRate.findFirst({
-    where: {
-      country,
-      type: "home",
-      maxWeightKg: { gte: weightKg },
-    },
-    orderBy: { maxWeightKg: "asc" },
-  });
-
-  if (!rate) return null;
-
-  return {
-    id: -1,
-    name: country === "FR" ? "Chronopost — Livraison à domicile" : "Livraison à domicile",
-    carrier: "chronopost",
-    price: rate.priceEur,
-    min_days: rate.minDays,
-    max_days: rate.maxDays,
-  };
 }
 
 async function getBoxtalRates(
@@ -122,24 +96,24 @@ async function getBoxtalRates(
 
       return { id: -(100 + idx), name: name.trim(), carrier, price: priceTTC, min_days: minDays, max_days: maxDays };
     })
-    .filter((r) => r.price > 0 && r.name)
-    .sort((a, b) => a.price - b.price)
-    .slice(0, 6);
+    .filter((r) => {
+      if (!r.price || !r.name) return false;
+      // Exclure les offres point relais (gérées séparément via BoxtalRelayPicker)
+      if (r.carrier === "mondial_relay") return false;
+      const n = r.name.toLowerCase();
+      if (n.includes("relais") || n.includes("relay") || n.includes("shop2shop")) return false;
+      return true;
+    })
+    .sort((a, b) => a.price - b.price);
 }
 
 export async function POST(req: NextRequest) {
   try {
     const { weightKg, toCountry = "FR", toZip = "75001", toCity = "Paris" } = await req.json();
 
-    // Pays supportés : tarif domicile depuis la DB (pas Boxtal)
-    if (DB_HOME_COUNTRIES.includes(toCountry)) {
-      const homeRate = await getHomeRate(weightKg, toCountry);
-      return NextResponse.json({ rates: homeRate ? [homeRate] : [] });
-    }
-
-    // Autres pays : appel Boxtal (non utilisé en production pour l'instant)
     const rates = await getBoxtalRates(weightKg, toCountry, toZip, toCity);
-    return NextResponse.json({ rates });
+    // Retourner la meilleure offre domicile (la moins chère)
+    return NextResponse.json({ rates: rates.slice(0, 1) });
   } catch (err) {
     console.error("Shipping rates error:", err);
     return NextResponse.json({ rates: [] });
