@@ -119,7 +119,6 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
       },
     });
 
-    console.log(`✅ DB — Commande ${session.id} sauvegardée`);
   } catch (err) {
     console.error("❌ DB — Erreur sauvegarde commande:", err);
   }
@@ -150,7 +149,6 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
           orderId:        session.id,
         }),
       });
-      console.log(`✅ Email confirmation envoyé à ${meta.email}`);
     } catch (err) {
       console.error("❌ Erreur envoi email confirmation:", err);
     }
@@ -170,21 +168,30 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
 
   // ── Création de la commande Boxtal ────────────────────────────────────────
 
+  // Mapping network codes → Boxtal shippingOfferCode
+  const NETWORK_TO_OFFER: Record<string, string> = {
+    MONR: process.env.BOXTAL_OFFER_MONR ?? "MONR-Standard",
+    CHRP: process.env.BOXTAL_OFFER_CHRP ?? "CHRP-ChronoRelais",
+  };
+  const rawNetwork = meta.service_point_network ?? "";
+  const shippingOfferCode = NETWORK_TO_OFFER[rawNetwork]
+    ?? (rawNetwork ? rawNetwork : (process.env.BOXTAL_OFFER_HOME ?? "COPR-CoprRelaisDomicileNat"));
+
   const boxtalResult = await createBoxtalOrder({
     orderReference:      session.id,
     recipientName:       meta.nom      ?? "Client",
     recipientEmail:      meta.email    ?? "",
+    recipientPhone:      meta.telephone ?? undefined,
     recipientStreet:     meta.adresse  ?? "",
     recipientCity:       meta.ville    ?? "",
     recipientPostalCode: meta.cp       ?? "",
     recipientCountry:    meta.pays     ?? "FR",
     weightKg,
-    network:             meta.service_point_network ?? "",
-    parcelPointCode:     meta.service_point_id      || undefined,
+    network:             shippingOfferCode,
+    parcelPointCode:     meta.service_point_id || undefined,
   });
 
   if (boxtalResult.ok) {
-    console.log(`✅ Boxtal order created — code: ${boxtalResult.orderCode}`);
     try {
       await prisma.order.update({
         where: { id: session.id },

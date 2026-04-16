@@ -1,67 +1,55 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyJwt } from "@/lib/admin-auth";
+import { createBoxtalOrder } from "@/lib/boxtalOrder";
 import { getBoxtalToken } from "@/lib/boxtalToken";
 
-export async function GET(req: NextRequest) {
-  const token = req.cookies.get("admin_token")?.value;
-  const payload = token ? await verifyJwt(token) : null;
-  if (!payload) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+export const dynamic = "force-dynamic";
 
-  const bearerToken = await getBoxtalToken();
+export async function GET() {
+  try {
+    const login    = process.env.BOXTAL_LOGIN    ?? "";
+    const password = process.env.BOXTAL_PASSWORD ?? "";
+    const auth     = Buffer.from(`${login}:${password}`).toString("base64");
 
-  const res = await fetch("https://api.boxtal.com/shipping/v3.1/networks", {
-    headers: { Authorization: `Bearer ${bearerToken}`, Accept: "application/json" },
-  });
+    // Test Boxtal v1 cotation avec Basic auth
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const collecte = tomorrow.toISOString().split("T")[0];
 
-  const text = await res.text();
-  return NextResponse.json({ status: res.status, body: text });
+    const url =
+      `https://www.envoimoinscher.com/api/v1/cotation?` +
+      `expediteur.type=entreprise&expediteur.pays=FR&expediteur.code_postal=78400&expediteur.ville=Chatou&` +
+      `destinataire.type=particulier&destinataire.pays=FR&destinataire.code_postal=75001&destinataire.ville=Paris&` +
+      `colis_0.poids=0.5&colis_0.longueur=30&colis_0.largeur=20&colis_0.hauteur=5&` +
+      `code_contenu=40110&collecte=${collecte}`;
+
+    const res = await fetch(url, {
+      headers: { Authorization: `Basic ${auth}`, Accept: "application/json" },
+    });
+    const text = await res.text();
+    let body: unknown;
+    try { body = JSON.parse(text); } catch { body = text.slice(0, 1000); }
+    return NextResponse.json({ status: res.status, body: typeof body === 'string' ? body : JSON.stringify(body) });
+  } catch (err) {
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
 }
 
 export async function POST(req: NextRequest) {
-  const token = req.cookies.get("admin_token")?.value;
-  const payload = token ? await verifyJwt(token) : null;
-  if (!payload) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
+  const body = await req.json().catch(() => ({}));
 
-  const bearerToken = await getBoxtalToken();
-
-  const shipment = {
-    orderReference: `TEST-${Date.now()}`,
-    fromAddress: {
-      company:        "Label Paire",
-      contact:        "Label Paire",
-      email:          "commandes@labelpaire.fr",
-      phone:          "0600000000",
-      street:         "9 Boulevard du Temple",
-      city:           "Chatou",
-      postalCode:     "78400",
-      countryIsoCode: "FR",
-    },
-    toAddress: {
-      contact:        "Jean Dupont",
-      email:          "test@labelpaire.fr",
-      street:         "10 Rue de Rivoli",
-      city:           "Paris",
-      postalCode:     "75001",
-      countryIsoCode: "FR",
-    },
-    parcels: [
-      { weight: 0.3, length: 30, width: 20, height: 5 },
-    ],
-    network: "CHRB",  // Chronopost home delivery
-  };
-
-  const body = { shipment };
-
-  const res = await fetch("https://api.boxtal.com/shipping/v3.1/shipping-order", {
-    method: "POST",
-    headers: {
-      Authorization:  `Bearer ${bearerToken}`,
-      "Content-Type": "application/json",
-      Accept:         "application/json",
-    },
-    body: JSON.stringify(body),
+  const result = await createBoxtalOrder({
+    orderReference:      body.orderReference      ?? `TEST-${Date.now()}`,
+    recipientName:       body.recipientName       ?? "Antoine Cordin",
+    recipientEmail:      body.recipientEmail      ?? (process.env.SENDER_EMAIL ?? "test@labelpaire.fr"),
+    recipientPhone:      body.recipientPhone      ?? "0600000000",
+    recipientStreet:     body.recipientStreet     ?? "9 Boulevard du Temple",
+    recipientCity:       body.recipientCity       ?? "Chatou",
+    recipientPostalCode: body.recipientPostalCode ?? "78400",
+    recipientCountry:    body.recipientCountry    ?? "FR",
+    weightKg:            body.weightKg            ?? 0.3,
+    network:             body.network             ?? "COPR",
+    parcelPointCode:     body.parcelPointCode,
   });
 
-  const responseText = await res.text();
-  return NextResponse.json({ status: res.status, requestBody: body, responseBody: responseText });
+  return NextResponse.json(result, { status: result.ok ? 200 : 500 });
 }

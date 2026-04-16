@@ -47,6 +47,11 @@ model Expense {
   createdAt   DateTime @default(now())
 }
 
+model ProductMeta {
+  slug  String  @id
+  badge String?
+}
+
 model ShippingRate {
   id          String @id @default(cuid())
   country     String // "FR", "BE", "LU", etc.

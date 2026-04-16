@@ -60,36 +60,6 @@ export const products: Product[] = [
     image: "/products/la-belle-creme.jpg",
   },
   {
-    slug: "la-peinture-blanche",
-    nom: "La Peinture Blanche",
-    prix: 15,
-    poids: 0.15,
-    description:
-      "Rénovateur blanchissant pour chaussures. Redonne vie aux zones décolorées et égratignées sur cuir, synthétique et autres matières. Finition propre et homogène.",
-    badge: "Nouveauté",
-    image: "/products/la-peinture-blanche.jpg",
-  },
-  {
-    slug: "la-peinture-noire",
-    nom: "La Peinture Noire",
-    prix: 15,
-    poids: 0.15,
-    description:
-      "Peinture rénovatrice noire pour recolorer et couvrir les zones abîmées de vos sneakers. Compatible avec le cuir, le synthétique et les matières textiles.",
-    badge: "Nouveauté",
-    image: "/products/la-peinture-noire.jpg",
-  },
-  {
-    slug: "paire-embauchoirs",
-    nom: "Paire d'Embauchoirs",
-    prix: 15,
-    poids: 0.25,
-    description:
-      "Embauchoirs en bois pour maintenir la forme de vos sneakers entre les portés. Absorbent l'humidité et préviennent les plis. Compatible toutes pointures.",
-    badge: null,
-    image: "/products/paire-embauchoirs.jpeg",
-  },
-  {
     slug: "spray-impermeabilisant",
     nom: "Le Spray Imperméabilisant",
     prix: 15,
@@ -108,6 +78,36 @@ export const products: Product[] = [
       "Permet de nettoyer les matières délicates (cuir, tissu, daim, nubuck) et de nettoyer en profondeur la semelle. Idéal pour essuyer et sécher les chaussures pendant le nettoyage.",
     badge: null,
     image: "/products/le-tampon-blanc.jpg",
+  },
+  {
+    slug: "la-peinture-blanche",
+    nom: "La Peinture Blanche",
+    prix: 15,
+    poids: 0.15,
+    description:
+      "Rénovateur blanchissant pour chaussures. Redonne vie aux zones décolorées et égratignées sur cuir, synthétique et autres matières. Finition propre et homogène.",
+    badge: null,
+    image: "/products/la-peinture-blanche.jpg",
+  },
+  {
+    slug: "la-peinture-noire",
+    nom: "La Peinture Noire",
+    prix: 15,
+    poids: 0.15,
+    description:
+      "Peinture rénovatrice noire pour recolorer et couvrir les zones abîmées de vos sneakers. Compatible avec le cuir, le synthétique et les matières textiles.",
+    badge: null,
+    image: "/products/la-peinture-noire.jpg",
+  },
+  {
+    slug: "paire-embauchoirs",
+    nom: "Paire d'Embauchoirs",
+    prix: 15,
+    poids: 0.25,
+    description:
+      "Embauchoirs en bois pour maintenir la forme de vos sneakers entre les portés. Absorbent l'humidité et préviennent les plis. Compatible toutes pointures.",
+    badge: null,
+    image: "/products/paire-embauchoirs.jpeg",
   },
   {
     slug: "patch-reparation-talon",

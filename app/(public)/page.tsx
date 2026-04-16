@@ -4,13 +4,13 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import AnimatedCounter from "@/components/AnimatedCounter";
 import ProductCard from "@/components/ProductCard";
-import { products } from "@/lib/products";
-import { useState } from "react";
+import { products, type Product } from "@/lib/products";
+import { useState, useEffect } from "react";
 import { useT } from "@/hooks/useT";
 import { tr } from "@/lib/i18n";
 
 const featuredSlugs = ["kit-reparation-premium", "kit-reparation", "la-belle-mousse", "spray-impermeabilisant"];
-const featuredProducts = featuredSlugs.map((s) => products.find((p) => p.slug === s)!).filter(Boolean);
+const staticFeatured = featuredSlugs.map((s) => products.find((p) => p.slug === s)!).filter(Boolean);
 
 // ─── Platform badge icons ─────────────────────────────────────────────────────
 function YouTubeBadge() {
@@ -81,7 +81,23 @@ const tickerItemsEn = [
 export default function Home() {
   const [email, setEmail] = useState("");
   const [subscribed, setSubscribed] = useState(false);
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>(staticFeatured);
   const { t, lang } = useT();
+
+  useEffect(() => {
+    fetch("/api/product-badges")
+      .then((r) => r.json())
+      .then((badgeMap: Record<string, string | null>) => {
+        setFeaturedProducts(
+          staticFeatured.map((p) =>
+            Object.prototype.hasOwnProperty.call(badgeMap, p.slug)
+              ? { ...p, badge: badgeMap[p.slug] }
+              : p
+          )
+        );
+      })
+      .catch(() => {});
+  }, []);
 
   const tickerItems = lang === "fr" ? tickerItemsFr : tickerItemsEn;
 
