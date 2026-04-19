@@ -31,6 +31,7 @@ export default function Navbar() {
         <nav className="hidden md:flex items-center gap-8 text-sm font-inter font-medium text-gray-400">
           <Link href="/" className="hover:text-[#ff9ed5] transition-colors">{t(tr.nav_home)}</Link>
           <Link href="/boutique" className="hover:text-[#ff9ed5] transition-colors">{t(tr.nav_shop)}</Link>
+          <Link href="/blog" className="hover:text-[#ff9ed5] transition-colors">{t(tr.nav_blog)}</Link>
           <Link href="/contact" className="hover:text-[#ff9ed5] transition-colors">{t(tr.nav_contact)}</Link>
         </nav>
 
@@ -101,6 +102,7 @@ export default function Navbar() {
         <div className="md:hidden bg-black/95 border-t border-white/[0.08] px-4 py-4 flex flex-col gap-4 text-sm font-medium text-gray-400">
           <Link href="/" onClick={() => setMenuOpen(false)} className="hover:text-[#ff9ed5]">{t(tr.nav_home)}</Link>
           <Link href="/boutique" onClick={() => setMenuOpen(false)} className="hover:text-[#ff9ed5]">{t(tr.nav_shop)}</Link>
+          <Link href="/blog" onClick={() => setMenuOpen(false)} className="hover:text-[#ff9ed5]">{t(tr.nav_blog)}</Link>
           <Link href="/contact" onClick={() => setMenuOpen(false)} className="hover:text-[#ff9ed5]">{t(tr.nav_contact)}</Link>
         </div>
       )}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createBoxtalOrder } from "@/lib/boxtalOrder";
-import { getBoxtalToken } from "@/lib/boxtalToken";
+
 
 export const dynamic = "force-dynamic";
 

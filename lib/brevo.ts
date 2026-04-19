@@ -53,6 +53,37 @@ async function getOrCreateList(): Promise<number> {
   throw new Error("Impossible de créer la liste Brevo");
 }
 
+export type OrderEmailData = {
+  to: string;
+  nom: string;
+  subject: string;
+  htmlContent: string;
+  textContent: string;
+};
+
+export async function sendTransactionalEmail(data: OrderEmailData): Promise<void> {
+  const apiKey = process.env.BREVO_API_KEY;
+  if (!apiKey) {
+    console.warn("⚠️ BREVO_API_KEY manquante — email ignoré");
+    return;
+  }
+
+  const res = await brevoRequest("/smtp/email", "POST", {
+    sender: { name: "Label Paire", email: "contact.labelpaire@gmail.com" },
+    to: [{ email: data.to, name: data.nom }],
+    subject: data.subject,
+    htmlContent: data.htmlContent,
+    textContent: data.textContent,
+  });
+
+  if (res.ok) {
+    console.log(`✅ Brevo — email envoyé à ${data.to}`);
+  } else {
+    const err = await res.text();
+    console.error(`❌ Brevo — erreur envoi email: ${err}`);
+  }
+}
+
 export type BrevoContactData = {
   email: string;
   nom: string;

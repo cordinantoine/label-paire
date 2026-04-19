@@ -11,6 +11,7 @@ export const tr = {
   // ─── NAVBAR ──────────────────────────────────────────────────────
   nav_home:    { fr: "Accueil",  en: "Home"    },
   nav_shop:    { fr: "Boutique", en: "Shop"    },
+  nav_blog:    { fr: "Le Mag",   en: "Blog"    },
   nav_contact: { fr: "Contact",  en: "Contact" },
   nav_cart:    { fr: "Panier",   en: "Cart"    },
 
