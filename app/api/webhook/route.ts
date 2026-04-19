@@ -162,14 +162,9 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
 
   // ── Création de la commande Boxtal ────────────────────────────────────────
 
-  // Mapping network codes → Boxtal shippingOfferCode
-  const NETWORK_TO_OFFER: Record<string, string> = {
-    MONR: process.env.BOXTAL_OFFER_MONR ?? "MONR-Standard",
-    CHRP: process.env.BOXTAL_OFFER_CHRP ?? "CHRP-ChronoRelais",
-  };
-  const rawNetwork = meta.service_point_network ?? "";
-  const shippingOfferCode = NETWORK_TO_OFFER[rawNetwork]
-    ?? (rawNetwork ? rawNetwork : (process.env.BOXTAL_OFFER_HOME ?? "COPR-CoprRelaisDomicileNat"));
+  // En API v1, on passe directement le code réseau brut (MONR, CHRP, ou "" pour domicile)
+  // La cotation Boxtal sélectionne automatiquement le bon opérateur/service
+  const network = meta.service_point_network ?? "";
 
   const boxtalResult = await createBoxtalOrder({
     orderReference:      session.id,
@@ -181,7 +176,7 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
     recipientPostalCode: meta.cp       ?? "",
     recipientCountry:    meta.pays     ?? "FR",
     weightKg,
-    network:             shippingOfferCode,
+    network,
     parcelPointCode:     meta.service_point_id || undefined,
   });
 

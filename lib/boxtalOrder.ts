@@ -96,7 +96,9 @@ async function getCotation(input: BoxtalOrderInput): Promise<BoxtalOffer | null>
     return null;
   }
 
-  const isRelay = ["MONR", "CHRP"].includes(input.network.toUpperCase());
+  // Supporte "MONR", "CHRP" ou les formes composées "MONR-Standard", "CHRP-ChronoRelais"
+  const networkPrefix = input.network.split("-")[0].toUpperCase();
+  const isRelay = ["MONR", "CHRP"].includes(networkPrefix);
 
   // Try to find an offer matching the requested network
   for (const block of offerBlocks) {
