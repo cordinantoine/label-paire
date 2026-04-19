@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 const PAGE_SIZE = 20;
 
 function formatEur(cents: number) {

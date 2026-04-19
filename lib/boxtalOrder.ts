@@ -189,7 +189,7 @@ export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<Boxtal
     console.log("Boxtal order URL:", url.slice(0, 300));
 
     const res = await fetch(url, {
-      method: "GET",
+      method: "POST",
       headers: {
         Authorization:   getAuth(),
         "Api-Version":   "1.3.7",

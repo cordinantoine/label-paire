@@ -1,6 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 
+export const dynamic = "force-dynamic";
+
 function formatEur(cents: number) {
   return (cents / 100).toLocaleString("fr-FR", {
     style: "currency",
