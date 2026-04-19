@@ -1,87 +1,77 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { getBoxtalToken } from "@/lib/boxtalToken";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
-  // ── OAuth token ──────────────────────────────────────────────────────────
-  let tokenValue = "";
-  let tokenStatus = 0;
-  try {
-    const login = (process.env.BOXTAL_LOGIN    ?? "").trim();
-    const pass  = (process.env.BOXTAL_PASSWORD ?? "").trim();
-    const auth  = Buffer.from(`${login}:${pass}`).toString("base64");
-    const res = await fetch("https://api.boxtal.com/iam/account-app/token", {
-      method: "POST",
-      headers: { Accept: "application/json", Authorization: `Basic ${auth}` },
-      body: "",
-    });
-    tokenStatus = res.status;
-    if (res.ok) {
-      const data = await res.json();
-      tokenValue = data.accessToken ?? "";
-    }
-  } catch { /* ignore */ }
+// Essaie de créer une commande avec un offer code donné et retourne le résultat
+async function tryOrder(token: string, offerCode: string) {
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const body = {
+    insured: false,
+    shipment: {
+      externalId: `DEBUG-${offerCode}-${Date.now()}`,
+      fromAddress: {
+        type: "PROFESSIONAL",
+        contact: { firstName: "Label", lastName: "Paire", email: "commandes@labelpaire.fr", phone: "0600000000" },
+        location: { countryIsoCode: "FR", city: "Chatou", postalCode: "78400", street: "Boulevard du Temple" },
+      },
+      toAddress: {
+        type: "RESIDENTIAL",
+        contact: { firstName: "Antoine", lastName: "Cordin", email: "cordin.antoine@gmail.com", phone: "0600000000" },
+        location: { countryIsoCode: "FR", city: "Paris", postalCode: "75001", street: "Rue de Rivoli" },
+      },
+      returnAddress: {
+        type: "PROFESSIONAL",
+        contact: { firstName: "Label", lastName: "Paire", email: "commandes@labelpaire.fr", phone: "0600000000" },
+        location: { countryIsoCode: "FR", city: "Chatou", postalCode: "78400", street: "Boulevard du Temple" },
+      },
+      packages: [{
+        type: "PARCEL", weight: 0.3, length: 30, width: 20, height: 5,
+        stackable: true, externalId: "pkg-1", value: 30,
+        content: { id: "content:v1:40110", description: "Vêtements neufs" },
+      }],
+    },
+    labelType: "PDF_A4",
+    shippingOfferCode: offerCode,
+    expectedTakingOverDate: tomorrow.toISOString().split("T")[0],
+  };
 
-  if (!tokenValue) {
-    return NextResponse.json({ error: `Impossible d'obtenir un token OAuth v3 (HTTP ${tokenStatus})` });
+  const res = await fetch("https://api.boxtal.com/shipping/v3.1/shipping-order", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return { offerCode, status: res.status, preview: text.slice(0, 200) };
+}
+
+export async function GET() {
+  let token = "";
+  try { token = await getBoxtalToken(); } catch (err) {
+    return NextResponse.json({ error: `Token failed: ${err}` });
   }
 
-  // ── Lister les offres disponibles pour Paris → Chatou ────────────────────
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
-  const collecte = tomorrow.toISOString().split("T")[0];
+  // Codes d'offre connus pour Boxtal v3 — on teste lesquels fonctionnent
+  const offerCodes = [
+    "CHRP-Chrono2ShopDirect",
+    "CHRP-ChronoRelais",
+    "CHRP-Chrono13",
+    "CHRP-R-S",
+    "MONR-Standard",
+    "MONR-R-S",
+    "COPR-CoprRelaisDomicileNat",
+    "COPR-ColissimoAccess",
+    "POFR-ColissimoAccess",
+    "BDMT-StandarHD",
+  ];
 
-  let offers: unknown[] = [];
-  let offersStatus = 0;
-  let offersRaw = "";
-  try {
-    const params = new URLSearchParams({
-      "fromAddress.countryIsoCode":   "FR",
-      "fromAddress.postalCode":       "78400",
-      "fromAddress.city":             "Chatou",
-      "toAddress.countryIsoCode":     "FR",
-      "toAddress.postalCode":         "75001",
-      "toAddress.city":               "Paris",
-      "packages[0].type":             "PARCEL",
-      "packages[0].weight":           "0.3",
-      "packages[0].length":           "30",
-      "packages[0].width":            "20",
-      "packages[0].height":           "5",
-      "packages[0].value":            "30",
-      "expectedTakingOverDate":       collecte,
-    });
-    const res = await fetch(`https://api.boxtal.com/shipping/v3.1/shipping-offer?${params}`, {
-      headers: { Authorization: `Bearer ${tokenValue}`, Accept: "application/json" },
-    });
-    offersStatus = res.status;
-    offersRaw = await res.text();
-    if (res.ok) {
-      const data = JSON.parse(offersRaw);
-      const list = data.content ?? data ?? [];
-      offers = (Array.isArray(list) ? list : []).map((o: Record<string, unknown>) => ({
-        code:    o.shippingOfferCode ?? o.code,
-        carrier: (o.carrier as Record<string,unknown>)?.label ?? o.carrier,
-        label:   o.label ?? o.name,
-        price:   o.price ?? o.totalPrice,
-      }));
-    }
-  } catch { /* ignore */ }
+  const results = [];
+  for (const code of offerCodes) {
+    const r = await tryOrder(token, code);
+    results.push(r);
+    // Stop dès qu'on trouve un succès
+    if (r.status === 200 || r.status === 201) break;
+  }
 
-  // ── DB stats ─────────────────────────────────────────────────────────────
-  let dbStats = { orderCount: 0, customerCount: 0 };
-  try {
-    dbStats = {
-      orderCount:    await prisma.order.count(),
-      customerCount: await prisma.customer.count(),
-    };
-  } catch { /* ignore */ }
-
-  return NextResponse.json({
-    tokenOk: !!tokenValue,
-    offersStatus,
-    offersCount: offers.length,
-    offers,
-    offersRawPreview: offersRaw.slice(0, 500),
-    dbStats,
-  });
+  return NextResponse.json({ tokenOk: true, results });
 }
