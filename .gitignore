@@ -39,3 +39,4 @@ next-env.d.ts
 .env*.local
 
 /lib/generated/prisma
+.boxtal-v3-spec.json

@@ -1,11 +1,18 @@
 /**
- * Boxtal API v1 — shipping order creation
- * Base URL : https://www.envoimoinscher.com
- * Auth     : HTTP Basic (BOXTAL_LOGIN:BOXTAL_PASSWORD)
- * Flow     : 1. GET cotation → pick offer  2. GET order → create label
+ * Boxtal API v3.1 — shipping order creation
+ * Base URL : https://api.boxtal.com
+ * Auth     : OAuth Bearer token (BOXTAL_LOGIN:BOXTAL_PASSWORD via /iam/account-app/token)
+ * Spec     : https://developer.boxtal.com/fr/fr/apiv3 (slug: api-v3)
+ *
+ * Flow : POST /shipping/v3.1/shipping-order (no separate offer fetch)
+ *
+ * NOTE: L'API v1 (www.envoimoinscher.com) bloque les IPs cloud/Vercel.
+ * L'API v3 (api.boxtal.com) utilise OAuth et fonctionne depuis n'importe quelle IP.
  */
 
-const BOXTAL_BASE = "https://www.envoimoinscher.com";
+import { getBoxtalToken } from "./boxtalToken";
+
+const BOXTAL_API = "https://api.boxtal.com";
 
 export type BoxtalOrderInput = {
   orderReference: string;
@@ -25,194 +32,163 @@ export type BoxtalOrderResult =
   | { ok: true; orderCode: string }
   | { ok: false; error: string };
 
-// ── XML helpers ────────────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
-function xmlTag(xml: string, tag: string): string {
-  const m = xml.match(new RegExp(`<${tag}[^>]*>([^<]*)</${tag}>`));
-  return m ? m[1].trim() : "";
+// Convertit un numéro FR "0612345678" en format E.164 "+33612345678".
+// Accepte aussi déjà au format international.
+function toE164(phone: string | undefined, fallback = "+33600000000"): string {
+  if (!phone) return fallback;
+  const trimmed = phone.trim().replace(/[\s.-]/g, "");
+  if (trimmed.startsWith("+")) return trimmed;
+  if (trimmed.startsWith("00")) return "+" + trimmed.slice(2);
+  if (trimmed.startsWith("0") && trimmed.length === 10) return "+33" + trimmed.slice(1);
+  return fallback;
 }
 
-function xmlAllTags(xml: string, tag: string): string[] {
-  const re = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "g");
-  const results: string[] = [];
-  let m;
-  while ((m = re.exec(xml)) !== null) results.push(m[1]);
-  return results;
+function senderAddress() {
+  return {
+    type: "BUSINESS" as const,
+    contact: {
+      firstName: "Label",
+      lastName:  "Paire",
+      email:     process.env.SENDER_EMAIL ?? "commandes@labelpaire.fr",
+      phone:     toE164(process.env.SENDER_PHONE, "+33600000000"),
+    },
+    location: {
+      countryIsoCode: "FR",
+      city:           process.env.SENDER_CITY        ?? "Chatou",
+      postalCode:     process.env.SENDER_POSTAL_CODE ?? "78400",
+      number:         process.env.SENDER_STREET_NUM  ?? "9",
+      street:         process.env.SENDER_STREET      ?? "Boulevard du Temple",
+    },
+  };
 }
 
-// ── Auth ───────────────────────────────────────────────────────────────────────
-
-function getAuth(): string {
-  const login    = process.env.BOXTAL_LOGIN    ?? "";
-  const password = process.env.BOXTAL_PASSWORD ?? "";
-  return "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
-}
-
-// ── Cotation → pick best offer ─────────────────────────────────────────────────
-
-type BoxtalOffer = { operator: string; service: string };
-
-async function getCotation(input: BoxtalOrderInput): Promise<BoxtalOffer | null> {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const collecte = tomorrow.toISOString().split("T")[0];
-
-  const params = new URLSearchParams({
-    "expediteur.type":            "entreprise",
-    "expediteur.pays":            "FR",
-    "expediteur.code_postal":     process.env.SENDER_POSTAL_CODE ?? "78400",
-    "expediteur.ville":           process.env.SENDER_CITY        ?? "Chatou",
-    "expediteur.adresse":         process.env.SENDER_STREET      ?? "9 Boulevard du Temple",
-    "destinataire.type":          "particulier",
-    "destinataire.pays":          input.recipientCountry || "FR",
-    "destinataire.code_postal":   input.recipientPostalCode,
-    "destinataire.ville":         input.recipientCity,
-    "destinataire.adresse":       input.recipientStreet,
-    "colis_0.poids":    String(Math.max(0.1, input.weightKg)),
-    "colis_0.longueur": "30",
-    "colis_0.largeur":  "20",
-    "colis_0.hauteur":  String(Math.max(5, Math.round(input.weightKg * 10))),
-    "code_contenu":               "40110",  // Tissus, vêtements neufs
-    "collecte":                   collecte,
-  });
-
-  const url = `${BOXTAL_BASE}/api/v1/cotation?${params.toString()}`;
-  const res = await fetch(url, {
-    headers: { Authorization: getAuth(), "Api-Version": "1.3.7" },
-  });
-  const xml = await res.text();
-  console.log("Boxtal cotation response:", res.status, xml.slice(0, 500));
-
-  if (!res.ok && res.status !== 400) {
-    console.error("Boxtal cotation error:", res.status, xml.slice(0, 300));
-    return null;
+// ── Sélection du code d'offre ──────────────────────────────────────────────────
+// L'API v3 n'a pas d'endpoint de cotation public, on mappe les réseaux sur les
+// offer codes connus. À ajuster selon les offres activées sur le compte Boxtal.
+function pickOfferCode(input: BoxtalOrderInput): string {
+  const prefix = input.network.split("-")[0].toUpperCase();
+  switch (prefix) {
+    case "MONR": return process.env.BOXTAL_OFFER_MONR ?? "MONR-CpourToi";
+    case "CHRP": return process.env.BOXTAL_OFFER_CHRP ?? "CHRP-ChronoRelais";
+    case "COPR": return process.env.BOXTAL_OFFER_COPR ?? "COPR-ColissimoAccess";
+    case "POFR": return process.env.BOXTAL_OFFER_POFR ?? "POFR-ColissimoAccess";
+    default:     return process.env.BOXTAL_OFFER_DEFAULT ?? "COPR-ColissimoAccess";
   }
-
-  // Parse offers from XML
-  // <offer> blocks contain <operator><code>MONR</code></operator><service><code>CpourToi</code></service>
-  const offerBlocks = xmlAllTags(xml, "offer");
-  if (!offerBlocks.length) {
-    console.error("Boxtal cotation: no offers found. XML:", xml.slice(0, 500));
-    return null;
-  }
-
-  // Supporte "MONR", "CHRP" ou les formes composées "MONR-Standard", "CHRP-ChronoRelais"
-  const networkPrefix = input.network.split("-")[0].toUpperCase();
-  const isRelay = ["MONR", "CHRP"].includes(networkPrefix);
-
-  // Try to find an offer matching the requested network
-  for (const block of offerBlocks) {
-    const opCode  = xmlTag(xmlAllTags(block, "operator")[0] ?? "", "code");
-    const svcCode = xmlTag(xmlAllTags(block, "service")[0]  ?? "", "code");
-    const deliveryType = xmlTag(block, "type"); // PICKUP_POINT or HOME_DELIVERY
-
-    const blockIsRelay = deliveryType === "PICKUP_POINT";
-
-    if (isRelay && blockIsRelay && (!input.network || opCode === input.network)) {
-      return { operator: opCode, service: svcCode };
-    }
-    if (!isRelay && !blockIsRelay) {
-      return { operator: opCode, service: svcCode };
-    }
-  }
-
-  // Fallback: first offer
-  const firstBlock = offerBlocks[0];
-  const opCode  = xmlTag(xmlAllTags(firstBlock, "operator")[0] ?? "", "code");
-  const svcCode = xmlTag(xmlAllTags(firstBlock, "service")[0]  ?? "", "code");
-  return { operator: opCode, service: svcCode };
 }
 
-// ── Create order ───────────────────────────────────────────────────────────────
+// ── Création de la commande ────────────────────────────────────────────────────
 
 export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<BoxtalOrderResult> {
   try {
-    const offer = await getCotation(input);
-    if (!offer) {
-      return { ok: false, error: "Aucune offre Boxtal disponible pour ce colis" };
-    }
+    const token = await getBoxtalToken();
 
-    console.log("Boxtal selected offer:", offer);
+    const offerCode = pickOfferCode(input);
+    console.log("Boxtal v3 selected offer:", offerCode, "for network:", input.network);
 
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const collecte = tomorrow.toISOString().split("T")[0];
 
-    const nameParts     = input.recipientName.trim().split(" ");
+    const nameParts      = input.recipientName.trim().split(" ");
     const recipientFirst = nameParts[0] ?? "Client";
     const recipientLast  = nameParts.slice(1).join(" ") || recipientFirst;
 
-    const params = new URLSearchParams({
-      "expediteur.type":        "entreprise",
-      "expediteur.pays":        "FR",
-      "expediteur.code_postal": process.env.SENDER_POSTAL_CODE ?? "78400",
-      "expediteur.ville":       process.env.SENDER_CITY        ?? "Chatou",
-      "expediteur.adresse":     process.env.SENDER_STREET      ?? "9 Boulevard du Temple",
-      "expediteur.civilite":    "M",
-      "expediteur.prenom":      "Label",
-      "expediteur.nom":         "Paire",
-      "expediteur.societe":     "Label Paire",
-      "expediteur.email":       process.env.SENDER_EMAIL ?? "commandes@labelpaire.fr",
-      "expediteur.tel":         process.env.SENDER_PHONE ?? "0600000000",
+    // Split recipient street into number + street name
+    const streetMatch    = input.recipientStreet.match(/^(\d+[a-zA-Z]?)\s+(.+)$/);
+    const streetNumber   = streetMatch ? streetMatch[1] : "1";
+    const streetName     = streetMatch ? streetMatch[2] : input.recipientStreet;
 
-      "destinataire.type":        "particulier",
-      "destinataire.pays":        input.recipientCountry || "FR",
-      "destinataire.code_postal": input.recipientPostalCode,
-      "destinataire.ville":       input.recipientCity,
-      "destinataire.adresse":     input.recipientStreet,
-      "destinataire.civilite":    "M",
-      "destinataire.prenom":      recipientFirst,
-      "destinataire.nom":         recipientLast,
-      "destinataire.email":       input.recipientEmail,
-      "destinataire.tel":         input.recipientPhone ?? "0600000000",
+    const toAddress = {
+      type: "RESIDENTIAL" as const,
+      contact: {
+        firstName: recipientFirst,
+        lastName:  recipientLast,
+        email:     input.recipientEmail,
+        phone:     toE164(input.recipientPhone, "+33600000000"),
+      },
+      location: {
+        countryIsoCode: input.recipientCountry || "FR",
+        city:           input.recipientCity,
+        postalCode:     input.recipientPostalCode,
+        number:         streetNumber,
+        street:         streetName,
+      },
+    };
 
-      "colis_0.poids":       String(Math.max(0.1, input.weightKg)),
-      "colis_0.longueur":    "30",
-      "colis_0.largeur":     "20",
-      "colis_0.hauteur":     String(Math.max(5, Math.round(input.weightKg * 10))),
-      "colis_0.valeur":      "30",
-      "colis_0.description": "Vêtements neufs",
+    const shipment: Record<string, unknown> = {
+      externalId:    input.orderReference,
+      fromAddress:   senderAddress(),
+      toAddress,
+      returnAddress: senderAddress(),
+      packages: [{
+        type:       "PARCEL",
+        weight:     Math.max(0.1, input.weightKg),
+        length:     30,
+        width:      20,
+        height:     Math.max(5, Math.round(input.weightKg * 10)),
+        stackable:  true,
+        externalId: "pkg-1",
+        value:      { value: 30, currency: "EUR" },
+        content: {
+          id:          "content:v1:40110",
+          description: "Vêtements neufs",
+        },
+      }],
+    };
 
-      "code_contenu":          "40110",
-      "collecte":              collecte,
-      "delay":                 "aucun",
-      "assurance.selection":   "false",
-      "operator":              offer.operator,
-      "service":               offer.service,
-      "raison":                "VENTE",
-    });
-
-    // Add relay point code if relay delivery
+    // Point relais : c'est pickupPointCode au niveau Shipment (pas toAddress.parcelPoint)
     if (input.parcelPointCode) {
-      params.set("retrait.pointrelais", input.parcelPointCode);
+      shipment.pickupPointCode = input.parcelPointCode;
     }
 
-    const url = `${BOXTAL_BASE}/api/v1/order?${params.toString()}`;
-    console.log("Boxtal order URL:", url.slice(0, 300));
+    const body = {
+      insured: false,
+      shipment,
+      labelType:              "PDF_A4",
+      shippingOfferCode:      offerCode,
+      expectedTakingOverDate: collecte,
+    };
 
-    const res = await fetch(url, {
-      method: "POST",
+    console.log("Boxtal v3 order body:", JSON.stringify(body).slice(0, 500));
+
+    const res = await fetch(`${BOXTAL_API}/shipping/v3.1/shipping-order`, {
+      method:  "POST",
       headers: {
-        Authorization:   getAuth(),
-        "Api-Version":   "1.3.7",
+        Authorization:  `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept:         "application/json",
       },
+      body: JSON.stringify(body),
     });
 
-    const xml = await res.text();
-    console.log("Boxtal order response:", res.status, xml.slice(0, 600));
+    const text = await res.text();
+    console.log("Boxtal v3 order response:", res.status, text.slice(0, 600));
 
     if (!res.ok) {
-      const errCode = xmlTag(xml, "code");
-      const errMsg  = xmlTag(xml, "message");
-      return { ok: false, error: `HTTP ${res.status}: ${errCode} — ${errMsg}` };
+      let errMsg = text.slice(0, 400);
+      try {
+        const errData = JSON.parse(text);
+        const errs = errData.errors ?? [];
+        const detailed = errs.map((e: { code: string; message?: string; parameters?: unknown }) =>
+          `${e.code}${e.message ? ": " + e.message : ""}${e.parameters ? " " + JSON.stringify(e.parameters) : ""}`
+        ).join(", ");
+        errMsg = detailed || errData.message || errMsg;
+      } catch { /* keep raw */ }
+      return { ok: false, error: `HTTP ${res.status}: ${errMsg}` };
     }
 
-    // Extract order reference from XML response
-    const orderRef = xmlTag(xml, "reference") || xmlTag(xml, "ref") || input.orderReference;
-    return { ok: true, orderCode: orderRef };
+    let orderCode = input.orderReference;
+    try {
+      const resData = JSON.parse(text);
+      orderCode = resData.reference ?? resData.id ?? resData.orderCode ?? input.orderReference;
+    } catch { /* keep default */ }
+
+    return { ok: true, orderCode };
 
   } catch (err) {
-    console.error("Boxtal v1 exception:", err);
+    console.error("Boxtal v3 exception:", err);
     return { ok: false, error: String(err) };
   }
 }
