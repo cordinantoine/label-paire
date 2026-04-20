@@ -67,14 +67,18 @@ function senderAddress() {
 // ── Sélection du code d'offre ──────────────────────────────────────────────────
 // L'API v3 n'a pas d'endpoint de cotation public, on mappe les réseaux sur les
 // offer codes connus. À ajuster selon les offres activées sur le compte Boxtal.
+// Offres activées sur le compte (vérifiées via /api/admin/debug):
+//   POFR-ColissimoAccess  ✅  (domicile, La Poste)
+//   MONR-CpourToi         ✅  (relais Mondial Relay — requiert pickupPointCode)
+//   CHRP-ChronoRelais     ✅  (relais Chronopost — requiert pickupPointCode)
 function pickOfferCode(input: BoxtalOrderInput): string {
   const prefix = input.network.split("-")[0].toUpperCase();
   switch (prefix) {
     case "MONR": return process.env.BOXTAL_OFFER_MONR ?? "MONR-CpourToi";
     case "CHRP": return process.env.BOXTAL_OFFER_CHRP ?? "CHRP-ChronoRelais";
-    case "COPR": return process.env.BOXTAL_OFFER_COPR ?? "COPR-ColissimoAccess";
+    case "COPR": return process.env.BOXTAL_OFFER_COPR ?? "POFR-ColissimoAccess";
     case "POFR": return process.env.BOXTAL_OFFER_POFR ?? "POFR-ColissimoAccess";
-    default:     return process.env.BOXTAL_OFFER_DEFAULT ?? "COPR-ColissimoAccess";
+    default:     return process.env.BOXTAL_OFFER_DEFAULT ?? "POFR-ColissimoAccess";
   }
 }
 
