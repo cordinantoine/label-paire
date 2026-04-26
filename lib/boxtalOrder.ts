@@ -29,7 +29,8 @@ export type BoxtalOrderInput = {
 };
 
 export type BoxtalOrderResult =
-  | { ok: true; orderCode: string }
+  | { ok: true; orderCode: string; skipped?: false }
+  | { ok: true; orderCode: string; skipped: true; reason: string }
   | { ok: false; error: string };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -85,6 +86,22 @@ function pickOfferCode(input: BoxtalOrderInput): string {
 // ── Création de la commande ────────────────────────────────────────────────────
 
 export async function createBoxtalOrder(input: BoxtalOrderInput): Promise<BoxtalOrderResult> {
+  // ── Livraison à domicile : on ne crée PAS d'expédition Boxtal automatiquement.
+  // L'API v3 ne supporte pas le mode "brouillon" — toute création est ferme avec
+  // shippingOfferCode obligatoire. Pour laisser le choix du transporteur (MR
+  // domicile moins cher que Colissimo, etc.), on skip l'appel et l'admin crée
+  // manuellement le brouillon dans Boxtal.
+  const isHomeDelivery = !input.parcelPointCode && !input.network;
+  if (isHomeDelivery) {
+    console.log("Boxtal v3 SKIP (home delivery — manual draft):", input.orderReference);
+    return {
+      ok:        true,
+      orderCode: `MANUAL-${input.orderReference}`,
+      skipped:   true,
+      reason:    "home_delivery_manual",
+    };
+  }
+
   try {
     const token = await getBoxtalToken();
 

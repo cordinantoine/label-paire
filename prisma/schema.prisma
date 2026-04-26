@@ -32,7 +32,7 @@ model Order {
   shippingMethodId String
   shippingCost     Int      @default(0) // centimes
   trackingNumber   String?
-  shippingStatus   String   @default("label_created") // label_created | shipped | delivered
+  shippingStatus   String   @default("label_created") // label_created | pending_manual | shipped | delivered
   paymentIntentId  String?
   customerId       String
   customer         Customer @relation(fields: [customerId], references: [id])
@@ -59,4 +59,15 @@ model ShippingRate {
   priceEur    Float  // prix TTC en euros
   minDays     Int
   maxDays     Int
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  url         String   // Vercel Blob URL
+  thumbnail   String   @default("") // Vercel Blob URL
+  duration    String   @default("") // ex: "3:42"
+  publishedAt DateTime @default(now())
+  createdAt   DateTime @default(now())
 }

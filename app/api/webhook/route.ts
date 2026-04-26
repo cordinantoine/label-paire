@@ -181,10 +181,13 @@ async function handlePaymentSuccess(session: Stripe.Checkout.Session) {
   });
 
   if (boxtalResult.ok) {
+    // pending_manual = livraison domicile, à créer manuellement dans Boxtal
+    // label_created  = expédition Boxtal créée automatiquement (relais MR/Chrono)
+    const status = boxtalResult.skipped ? "pending_manual" : "label_created";
     try {
       await prisma.order.update({
         where: { id: session.id },
-        data: { shippingStatus: "label_created" },
+        data: { shippingStatus: status },
       });
     } catch (err) {
       console.error("❌ DB — Erreur mise à jour shippingStatus:", err);
