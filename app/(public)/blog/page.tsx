@@ -1,6 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { blogPosts, categoryColors } from "@/lib/blog";
+import { prisma } from "@/lib/prisma";
+import VideoGrid from "@/components/VideoGrid";
 
 export const metadata: Metadata = {
   title: "Le Mag — Conseils entretien sneakers | Label Paire",
@@ -24,9 +26,10 @@ function formatDate(iso: string) {
   });
 }
 
-export default function BlogIndexPage() {
+export default async function BlogIndexPage() {
   const featured = blogPosts[0];
   const rest = blogPosts.slice(1);
+  const videos = await prisma.video.findMany({ orderBy: { publishedAt: "desc" } });
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -126,6 +129,23 @@ export default function BlogIndexPage() {
             </Link>
           ))}
         </div>
+
+        {/* Videos */}
+        {videos.length > 0 && (
+          <div className="mt-16 pt-12 border-t border-white/[0.06]">
+            <p className="text-xs font-semibold tracking-[0.15em] uppercase text-gray-500 mb-5">
+              Nos vidéos
+            </p>
+            <VideoGrid videos={videos.map((v) => ({
+              id: v.id,
+              title: v.title,
+              description: v.description,
+              url: v.url,
+              thumbnail: v.thumbnail,
+              duration: v.duration,
+            }))} />
+          </div>
+        )}
       </div>
     </div>
   );

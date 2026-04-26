@@ -29,6 +29,9 @@ export default function AdminLayout({
           <Link href="/admin/depenses" className="hover:text-[#ff9ed5] transition-colors">
             Dépenses
           </Link>
+          <Link href="/admin/videos" className="hover:text-[#ff9ed5] transition-colors">
+            Vidéos
+          </Link>
           <form action="/api/admin/logout" method="POST">
             <button
               type="submit"
