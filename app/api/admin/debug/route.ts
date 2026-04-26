@@ -62,13 +62,20 @@ export async function GET() {
     return NextResponse.json({ error: `Token failed: ${err}` });
   }
 
-  // On teste les codes d'offre les plus probablement activés sur le compte
+  // On cherche l'offre Mondial Relay DOMICILE activée sur le compte
+  // (livraison à domicile, pas en point relais — moins chère que Colissimo)
   const offerCodes = [
-    "MONR-CpourToi",           // Exemple officiel dans la doc
-    "CHRP-ChronoRelais",
+    "MONR-Home",
+    "MONR-HomePrivate",
+    "MONR-HomeMaxi",
+    "MONR-HomeXL",
+    "MONR-HomeS",
+    "MONR-HomeM",
+    "MONR-HomeL",
+    "MONR-HomePlus",
+    "MONR-Domicile",
     "MONR-Standard",
-    "COPR-ColissimoAccess",
-    "POFR-ColissimoAccess",
+    "POFR-ColissimoAccess",    // Fallback connu pour vérifier que le token marche
   ];
 
   const results = [];
