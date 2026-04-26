@@ -62,21 +62,14 @@ export async function GET() {
     return NextResponse.json({ error: `Token failed: ${err}` });
   }
 
-  // 2e batch : variantes Mondial Relay (Home/Predict/L/XL)
-  const offerCodes = [
-    "MONR-LHome",
-    "MONR-LHomePrivate",
-    "MONR-LHomeS",
-    "MONR-LHomeM",
-    "MONR-LHomeL",
-    "MONR-LHomeXL",
-    "MONR-Predict",
-    "MONR-PredictHome",
-    "MONR-XL",
-    "MONR-CpourToiHome",
-    "MONR-CpourToiDomicile",
-    "MONR-Express",
-  ];
+  // Offres testables. Pour ajouter un code à tester ponctuellement,
+  // mets-le ici puis redeploie. Garde la liste courte pour éviter
+  // de créer des expéditions test inutiles.
+  // Offres ACTIVÉES sur le compte (vérifiées) :
+  //   POFR-ColissimoAccess  (domicile, La Poste)
+  //   MONR-CpourToi         (relais Mondial Relay — requiert pickupPointCode)
+  //   CHRP-ChronoRelais     (relais Chronopost — requiert pickupPointCode)
+  const offerCodes = (process.env.BOXTAL_DEBUG_OFFERS ?? "POFR-ColissimoAccess").split(",");
 
   const results = [];
   for (const code of offerCodes) {
